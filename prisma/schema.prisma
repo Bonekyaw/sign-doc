@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DoctorType {
+  FT
+  HALF_TIME
+  PT
+}
+
+enum RestrictionType {
+  NO_TWENTY_FOUR
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum RotationStepType {
+  L
+  N
+  TWENTY_FOUR
+  OFF
+}
+
+model ShiftTypeConfig {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  label         String
+  startTime     String   @map("start_time")
+  endTime       String   @map("end_time")
+  durationHours Int      @map("duration_hours")
+  color         String
+  sortOrder     Int      @default(0) @map("sort_order")
+  isActive      Boolean  @default(true) @map("is_active")
+  shifts        Shift[]
+
+  @@map("shift_type_configs")
+}
+
+model Doctor {
+  id            String              @id @default(cuid())
+  name          String
+  type          DoctorType
+  targetHours   Int                 @map("target_hours")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+  shifts        Shift[]
+  leaveRequests LeaveRequest[]
+  restrictions  DoctorRestriction[]
+  rotation      DoctorRotation?
+
+  @@map("doctors")
+}
+
+model DoctorRestriction {
+  id       String          @id @default(cuid())
+  doctorId String          @map("doctor_id")
+  type     RestrictionType
+  doctor   Doctor          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, type])
+  @@map("doctor_restrictions")
+}
+
+model MonthSettings {
+  id               String @id @default(cuid())
+  year             Int
+  month            Int
+  dayShiftTarget   Int    @map("day_shift_target")
+  nightShiftTarget Int    @map("night_shift_target")
+
+  @@unique([year, month])
+  @@map("month_settings")
+}
+
+model DailyCoverage {
+  id               String   @id @default(cuid())
+  date             DateTime @unique @db.Date
+  dayShiftTarget   Int      @map("day_shift_target")
+  nightShiftTarget Int      @map("night_shift_target")
+
+  @@map("daily_coverage")
+}
+
+model Shift {
+  id          String          @id @default(cuid())
+  date        DateTime        @db.Date
+  shiftTypeId String          @map("shift_type_id")
+  doctorId    String          @map("doctor_id")
+  shiftType   ShiftTypeConfig @relation(fields: [shiftTypeId], references: [id])
+  doctor      Doctor          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, date])
+  @@index([date])
+  @@index([date, shiftTypeId])
+  @@map("shifts")
+}
+
+model RotationTemplate {
+  id              String               @id @default(cuid())
+  name            String
+  steps           RotationTemplateStep[]
+  doctorRotations DoctorRotation[]
+
+  @@map("rotation_templates")
+}
+
+model RotationTemplateStep {
+  id         String           @id @default(cuid())
+  templateId String           @map("template_id")
+  sortOrder  Int              @map("sort_order")
+  stepType   RotationStepType @map("step_type")
+  template   RotationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, sortOrder])
+  @@map("rotation_template_steps")
+}
+
+model DoctorRotation {
+  id          String           @id @default(cuid())
+  doctorId    String           @unique @map("doctor_id")
+  templateId  String           @map("template_id")
+  startDate   DateTime         @db.Date @map("start_date")
+  startOffset Int              @default(0) @map("start_offset")
+  doctor      Doctor           @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  template    RotationTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  @@map("doctor_rotations")
+}
+
+model LeaveRequest {
+  id        String      @id @default(cuid())
+  date      DateTime    @db.Date
+  doctorId  String      @map("doctor_id")
+  status    LeaveStatus @default(PENDING)
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  doctor    Doctor      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, date])
+  @@index([date, status])
+  @@map("leave_requests")
+}

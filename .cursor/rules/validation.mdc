@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+
+Use react-hook-form + zod validation for every form.
+Use validation in server action

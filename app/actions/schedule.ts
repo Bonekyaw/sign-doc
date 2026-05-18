@@ -1,0 +1,245 @@
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+import { scheduleTag } from "@/lib/data/cache-tags";
+import { prisma } from "@/lib/db";
+import { autoAssign } from "@/lib/scheduling/auto-assign";
+import {
+  getCoverageForDate,
+  getDailyCoverageOverrides,
+  getMonthCoverageDefaults,
+  loadDoctors,
+  loadApprovedLeave,
+  loadDoctorRotations,
+  loadMonthShifts,
+  loadShiftTypes,
+  shiftCodeFromId,
+} from "@/lib/scheduling/context";
+import { dateKey, getMonthDateKeys, parseDateKey } from "@/lib/scheduling/dates";
+import { countBandForDate } from "@/lib/scheduling/validate-coverage";
+import { computeMonthlyHours } from "@/lib/scheduling/compute-hours";
+import { validateAssignment } from "@/lib/scheduling/validate-assignment";
+import type { ShiftCode } from "@/lib/scheduling/types";
+
+export async function getMonthSchedule(year: number, month: number) {
+  const monthKeys = getMonthDateKeys(year, month);
+  const start = parseDateKey(monthKeys[0]);
+  const end = parseDateKey(monthKeys[monthKeys.length - 1]);
+
+  const [doctors, shiftTypes, shiftRows, monthDefaults, dailyOverrides] =
+    await Promise.all([
+      loadDoctors(),
+      loadShiftTypes(),
+      prisma.shift.findMany({
+        where: { date: { gte: start, lte: end } },
+        include: { shiftType: true, doctor: true },
+      }),
+      getMonthCoverageDefaults(year, month),
+      getDailyCoverageOverrides(year, month),
+    ]);
+
+  const shifts = shiftRows.map((s) => ({
+    doctorId: s.doctorId,
+    date: s.date,
+    shiftCode: s.shiftType.code as ShiftCode,
+    durationHours: s.shiftType.durationHours,
+  }));
+
+  const dates = monthKeys.map(parseDateKey);
+
+  const coverageByDate = monthKeys.map((key) => {
+    const target = dailyOverrides.get(key) ?? monthDefaults;
+    const date = parseDateKey(key);
+    const lCount = countBandForDate(date, "L", shifts);
+    const nCount = countBandForDate(date, "N", shifts);
+    return {
+      date: key,
+      dayShiftTarget: target.dayShiftTarget,
+      nightShiftTarget: target.nightShiftTarget,
+      lCount,
+      nCount,
+    };
+  });
+
+  const hourSummary = doctors.map((d) => ({
+    doctorId: d.id,
+    worked: computeMonthlyHours(d.id, monthKeys, shifts),
+    target: d.targetHours,
+  }));
+
+  return {
+    year,
+    month,
+    doctors,
+    shiftTypes,
+    shifts,
+    shiftRows,
+    monthKeys,
+    dates,
+    monthDefaults,
+    coverageByDate,
+    hourSummary,
+  };
+}
+
+export async function assignShift(data: {
+  doctorId: string;
+  dateStr: string;
+  shiftTypeId: string;
+  year: number;
+  month: number;
+}) {
+  const { doctorId, dateStr, shiftTypeId, year, month } = data;
+  const date = parseDateKey(dateStr);
+  const [doctors, shiftTypes, existingShifts, coverageTarget] =
+    await Promise.all([
+      loadDoctors(),
+      loadShiftTypes(),
+      loadMonthShifts(year, month),
+      getCoverageForDate(year, month, date),
+    ]);
+
+  const doctor = doctors.find((d) => d.id === doctorId);
+  const shiftCode = shiftCodeFromId(shiftTypes, shiftTypeId);
+  if (!doctor || !shiftCode) {
+    return { ok: false as const, errors: ["Invalid doctor or shift type."] };
+  }
+
+  const monthKeys = getMonthDateKeys(year, month);
+  const result = validateAssignment({
+    doctor,
+    date,
+    shiftCode,
+    shiftTypes,
+    existingShifts,
+    monthKeys,
+    coverageTarget,
+  });
+
+  if (!result.ok) {
+    return { ok: false as const, errors: result.errors, warnings: result.warnings };
+  }
+
+  await prisma.shift.upsert({
+    where: { doctorId_date: { doctorId, date } },
+    create: { doctorId, date, shiftTypeId },
+    update: { shiftTypeId },
+  });
+
+  revalidatePath(`/schedule/${year}/${month}`);
+  revalidatePath("/");
+  revalidateTag(scheduleTag(year, month), "max");
+  return { ok: true as const, warnings: result.warnings };
+}
+
+export async function clearShift(data: {
+  doctorId: string;
+  dateStr: string;
+  year: number;
+  month: number;
+}) {
+  const date = parseDateKey(data.dateStr);
+  await prisma.shift.deleteMany({
+    where: { doctorId: data.doctorId, date },
+  });
+  revalidatePath(`/schedule/${data.year}/${data.month}`);
+  revalidatePath("/");
+  revalidateTag(scheduleTag(data.year, data.month), "max");
+  return { ok: true as const };
+}
+
+export async function validateShiftPreview(data: {
+  doctorId: string;
+  dateStr: string;
+  shiftTypeId: string;
+  year: number;
+  month: number;
+}) {
+  const date = parseDateKey(data.dateStr);
+  const [doctors, shiftTypes, existingShifts, coverageTarget] =
+    await Promise.all([
+      loadDoctors(),
+      loadShiftTypes(),
+      loadMonthShifts(data.year, data.month),
+      getCoverageForDate(data.year, data.month, date),
+    ]);
+
+  const doctor = doctors.find((d) => d.id === data.doctorId);
+  const shiftCode = shiftCodeFromId(shiftTypes, data.shiftTypeId);
+  if (!doctor || !shiftCode) {
+    return { ok: false, errors: ["Invalid selection."], warnings: [] };
+  }
+
+  return validateAssignment({
+    doctor,
+    date,
+    shiftCode,
+    shiftTypes,
+    existingShifts,
+    monthKeys: getMonthDateKeys(data.year, data.month),
+    coverageTarget,
+  });
+}
+
+export async function suggestSchedule(year: number, month: number) {
+  const [
+    doctors,
+    shiftTypes,
+    existingShifts,
+    monthDefaults,
+    dailyOverrides,
+    doctorRotations,
+    leaveByDoctor,
+  ] = await Promise.all([
+    loadDoctors(),
+    loadShiftTypes(),
+    loadMonthShifts(year, month),
+    getMonthCoverageDefaults(year, month),
+    getDailyCoverageOverrides(year, month),
+    loadDoctorRotations(),
+    loadApprovedLeave(year, month),
+  ]);
+
+  return autoAssign({
+    year,
+    month,
+    doctors,
+    shiftTypes,
+    existingShifts,
+    monthDefaults,
+    dailyOverrides,
+    doctorRotations,
+    leaveByDoctor,
+  });
+}
+
+export async function applyAutoAssign(
+  year: number,
+  month: number,
+  proposals: {
+    doctorId: string;
+    date: string;
+    shiftTypeId: string;
+  }[],
+) {
+  for (const p of proposals) {
+    await prisma.shift.upsert({
+      where: {
+        doctorId_date: {
+          doctorId: p.doctorId,
+          date: parseDateKey(p.date),
+        },
+      },
+      create: {
+        doctorId: p.doctorId,
+        date: parseDateKey(p.date),
+        shiftTypeId: p.shiftTypeId,
+      },
+      update: { shiftTypeId: p.shiftTypeId },
+    });
+  }
+  revalidatePath(`/schedule/${year}/${month}`);
+  revalidatePath("/");
+  revalidateTag(scheduleTag(year, month), "max");
+  return { ok: true };
+}
