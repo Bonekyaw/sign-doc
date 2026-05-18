@@ -2,11 +2,36 @@
 
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import type { UserRole } from "@/app/generated/prisma/client";
 import { AdminNav } from "@/components/layout/AdminNav";
+import { LogoutButton } from "@/components/layout/LogoutButton";
 import { cn } from "@/lib/utils";
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+type PortalSession = {
+  username: string;
+  role: UserRole;
+} | null;
+
+function roleLabel(role: UserRole) {
+  switch (role) {
+    case "OWNER":
+      return "Owner";
+    case "ADMIN":
+      return "Admin";
+    case "DOCTOR":
+      return "Doctor";
+  }
+}
+
+export function AdminShell({
+  children,
+  session,
+}: {
+  children: React.ReactNode;
+  session: PortalSession;
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const subtitle = session ? `${roleLabel(session.role)} · ${session.username}` : "Admin portal";
 
   return (
     <div className="min-h-screen bg-background">
@@ -38,7 +63,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-[280px] transform border-r border-neutral-200/80 bg-white shadow-2xl transition-transform duration-300 ease-out lg:hidden",
+          "fixed inset-y-0 left-0 z-50 flex w-[280px] transform flex-col border-r border-neutral-200/80 bg-white shadow-2xl transition-transform duration-300 ease-out lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -49,27 +74,37 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </span>
             <div>
               <p className="text-sm font-semibold text-black">Duty Schedule</p>
-              <p className="text-xs text-neutral-500">Admin</p>
+              <p className="text-xs text-neutral-500">{subtitle}</p>
             </div>
           </div>
         </div>
-        <AdminNav onNavigate={() => setMobileOpen(false)} />
+        <div className="flex-1 overflow-y-auto">
+          <AdminNav role={session?.role ?? null} onNavigate={() => setMobileOpen(false)} />
+        </div>
+        <div className="border-t border-neutral-200/80 p-4">
+          <LogoutButton />
+        </div>
       </aside>
 
       <div className="flex min-h-screen pt-14 lg:pt-0">
-        <aside className="hidden w-[260px] shrink-0 border-r border-neutral-200/80 bg-white lg:block">
-          <div className="sticky top-0 border-b border-neutral-200/80 px-5 py-6">
+        <aside className="hidden w-[260px] shrink-0 flex-col border-r border-neutral-200/80 bg-white lg:flex">
+          <div className="border-b border-neutral-200/80 px-5 py-6">
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 text-sm font-bold text-white shadow-lg shadow-sky-500/25">
                 DS
               </span>
               <div>
                 <p className="text-sm font-semibold text-black">Duty Schedule</p>
-                <p className="text-xs text-neutral-500">Admin portal</p>
+                <p className="text-xs text-neutral-500">{subtitle}</p>
               </div>
             </div>
           </div>
-          <AdminNav />
+          <div className="flex-1 overflow-y-auto">
+            <AdminNav role={session?.role ?? null} />
+          </div>
+          <div className="border-t border-neutral-200/80 p-4">
+            <LogoutButton />
+          </div>
         </aside>
 
         <main className="flex-1 overflow-auto">

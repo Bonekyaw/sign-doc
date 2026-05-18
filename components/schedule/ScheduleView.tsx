@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -75,6 +76,8 @@ type Props = {
     nCount: number;
   }[];
   hourSummary: HourRow[];
+  readOnly?: boolean;
+  scheduleBasePath?: string;
 };
 
 function DraggableShift({
@@ -104,6 +107,27 @@ function DraggableShift({
     >
       {label}
     </button>
+  );
+}
+
+function ReadOnlyScheduleCell({
+  assignment,
+}: {
+  assignment?: ShiftRow;
+}) {
+  return (
+    <td className="border border-sky-50 p-1 text-center">
+      {assignment ? (
+        <span
+          className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold text-white"
+          style={{ backgroundColor: assignment.color }}
+        >
+          {displayShiftCode(assignment.code)}
+        </span>
+      ) : (
+        <span className="text-slate-300">·</span>
+      )}
+    </td>
   );
 }
 
@@ -154,6 +178,8 @@ export function ScheduleView({
   monthKeys,
   coverageByDate,
   hourSummary,
+  readOnly = false,
+  scheduleBasePath = "/schedule",
 }: Props) {
   const router = useRouter();
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
@@ -197,6 +223,14 @@ export function ScheduleView({
     month === 12
       ? { year: year + 1, month: 1 }
       : { year, month: month + 1 };
+  const prevHref =
+    scheduleBasePath === "/my-schedule"
+      ? `/my-schedule?year=${prevMonth.year}&month=${prevMonth.month}`
+      : `${scheduleBasePath}/${prevMonth.year}/${prevMonth.month}`;
+  const nextHref =
+    scheduleBasePath === "/my-schedule"
+      ? `/my-schedule?year=${nextMonth.year}&month=${nextMonth.month}`
+      : `${scheduleBasePath}/${nextMonth.year}/${nextMonth.month}`;
 
   const showMessage = useCallback(
     (type: "error" | "warning" | "success", texts: string[]) => {
@@ -297,22 +331,24 @@ export function ScheduleView({
     <div className="space-y-4">
       <PageHeader
         title={format(new Date(Date.UTC(year, month - 1, 1)), "MMMM yyyy")}
-        description="Drag shifts onto cells or click to pick"
+        description={
+          readOnly
+            ? "Your assigned shifts for this month"
+            : "Drag shifts onto cells or click to pick"
+        }
         actions={
           <>
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/schedule/${prevMonth.year}/${prevMonth.month}`}>
-                Previous
-              </Link>
+              <Link href={prevHref}>Previous</Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/schedule/${nextMonth.year}/${nextMonth.month}`}>
-                Next
-              </Link>
+              <Link href={nextHref}>Next</Link>
             </Button>
-            <Button onClick={handleAutoAssign} disabled={loading}>
-              Auto-assign
-            </Button>
+            {!readOnly ? (
+              <Button onClick={handleAutoAssign} disabled={loading}>
+                Auto-assign
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -331,8 +367,53 @@ export function ScheduleView({
         </div>
       )}
 
-      <CoverageStrip coverage={coverageByDate} />
+      {!readOnly ? <CoverageStrip coverage={coverageByDate} /> : null}
 
+      {readOnly ? (
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200/80 bg-white shadow-[var(--shadow-card)]">
+          <table className="min-w-max text-xs">
+            <thead>
+              <tr className="bg-neutral-50">
+                <th className="sticky left-0 z-10 bg-neutral-50 p-2 text-left font-medium text-black">
+                  Doctor
+                </th>
+                <th className="sticky left-24 z-10 bg-neutral-50 p-2 font-medium text-black">
+                  Hours
+                </th>
+                {monthKeys.map((k) => (
+                  <th key={k} className="p-1 font-mono text-[10px]">
+                    {k.slice(8)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {doctors.map((doc) => {
+                const hours = hoursMap.get(doc.id);
+                return (
+                  <tr key={doc.id}>
+                    <td className="sticky left-0 z-10 bg-white p-2 font-medium whitespace-nowrap">
+                      {doc.name}
+                    </td>
+                    <td className="sticky left-24 z-10 bg-white p-2">
+                      <HourBar
+                        worked={hours?.worked ?? 0}
+                        target={hours?.target ?? doc.targetHours}
+                      />
+                    </td>
+                    {monthKeys.map((dateStr) => (
+                      <ReadOnlyScheduleCell
+                        key={dateStr}
+                        assignment={assignmentMap.get(`${doc.id}__${dateStr}`)}
+                      />
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
       <DndContext
         sensors={sensors}
         onDragStart={(e: DragStartEvent) => {
@@ -431,11 +512,17 @@ export function ScheduleView({
           ) : null}
         </DragOverlay>
       </DndContext>
+      )}
 
+      {!readOnly ? (
+      <>
       <Dialog open={!!picker} onOpenChange={(o) => !o && setPicker(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assign shift</DialogTitle>
+            <DialogDescription>
+              Choose a shift type or clear the assignment for this day.
+            </DialogDescription>
           </DialogHeader>
           {picker && (
             <div className="flex flex-wrap gap-2">
@@ -478,6 +565,9 @@ export function ScheduleView({
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Auto-assign preview</DialogTitle>
+            <DialogDescription>
+              Review suggested assignments before applying them to the schedule.
+            </DialogDescription>
           </DialogHeader>
           {autoPreview && (
             <div className="space-y-4">
@@ -537,6 +627,8 @@ export function ScheduleView({
           )}
         </DialogContent>
       </Dialog>
+      </>
+      ) : null}
     </div>
   );
 }

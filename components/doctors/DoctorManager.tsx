@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -54,9 +55,11 @@ type TemplateOption = { id: string; name: string };
 export function DoctorManager({
   doctors,
   rotationTemplates,
+  canWrite = true,
 }: {
   doctors: DoctorRow[];
   rotationTemplates: TemplateOption[];
+  canWrite?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -132,6 +135,7 @@ export function DoctorManager({
         title="Doctors"
         description="Manage roster, hour limits, and rotation templates."
         actions={
+          canWrite ? (
           <Dialog
             open={open}
             onOpenChange={(v) => {
@@ -149,6 +153,11 @@ export function DoctorManager({
               <DialogTitle>
                 {editing ? "Edit doctor" : "Add doctor"}
               </DialogTitle>
+              <DialogDescription>
+                {editing
+                  ? "Update roster details, hour limits, and rotation."
+                  : "Add a doctor to the roster with type and optional rotation."}
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div>
@@ -254,6 +263,7 @@ export function DoctorManager({
             </form>
             </DialogContent>
           </Dialog>
+          ) : undefined
         }
       />
 
@@ -269,6 +279,7 @@ export function DoctorManager({
                     {d.type} · {d.targetHours}h / month
                   </p>
                 </div>
+                {canWrite ? (
                 <div className="flex gap-1">
                   <Button
                     variant="ghost"
@@ -289,6 +300,7 @@ export function DoctorManager({
                     Delete
                   </Button>
                 </div>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-1">
                 {d.restrictions.some((r) => r.type === "NO_TWENTY_FOUR") && (
@@ -350,6 +362,8 @@ export function DoctorManager({
                   )}
                 </td>
                 <td className="p-3 text-right">
+                  {canWrite ? (
+                  <>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -368,6 +382,8 @@ export function DoctorManager({
                   >
                     Delete
                   </Button>
+                  </>
+                  ) : null}
                 </td>
               </tr>
             ))}

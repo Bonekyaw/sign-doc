@@ -5,8 +5,10 @@ import { rotationTemplatesTag } from "@/lib/data/cache-tags";
 import { prisma } from "@/lib/db";
 import { rotationTemplateSchema } from "@/lib/schemas/rotation";
 import type { RotationStepType } from "@/lib/scheduling/rotation";
+import { requireAdminRead, requireWrite } from "@/lib/auth/guards";
 
 export async function listRotationTemplates() {
+  await requireAdminRead();
   return prisma.rotationTemplate.findMany({
     include: { steps: { orderBy: { sortOrder: "asc" } } },
     orderBy: { name: "asc" },
@@ -17,6 +19,7 @@ export async function createRotationTemplate(data: {
   name: string;
   steps: { stepType: RotationStepType }[];
 }) {
+  await requireWrite();
   const parsed = rotationTemplateSchema.safeParse(data);
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid template.");
@@ -41,6 +44,7 @@ export async function updateRotationTemplate(
   id: string,
   data: { name: string; steps: { stepType: RotationStepType }[] },
 ) {
+  await requireWrite();
   const parsed = rotationTemplateSchema.safeParse(data);
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid template.");
@@ -66,6 +70,7 @@ export async function updateRotationTemplate(
 }
 
 export async function deleteRotationTemplate(id: string) {
+  await requireWrite();
   const inUse = await prisma.doctorRotation.count({
     where: { templateId: id },
   });

@@ -10,6 +10,7 @@ import {
   dailyCoverageSchema,
   monthCoverageSchema,
 } from "@/lib/schemas/coverage";
+import { requireAdminRead, requireWrite } from "@/lib/auth/guards";
 
 function assertCoverageTargets(dayShiftTarget: number, nightShiftTarget: number) {
   const err = validateCoverageTargetValues(dayShiftTarget, nightShiftTarget);
@@ -17,6 +18,7 @@ function assertCoverageTargets(dayShiftTarget: number, nightShiftTarget: number)
 }
 
 export async function getMonthSettings(year: number, month: number) {
+  await requireAdminRead();
   return prisma.monthSettings.findUnique({
     where: { year_month: { year, month } },
   });
@@ -28,6 +30,7 @@ export async function setMonthDefaults(
   dayShiftTarget: number,
   nightShiftTarget: number,
 ) {
+  await requireWrite();
   const parsed = monthCoverageSchema.safeParse({
     year,
     month,
@@ -56,6 +59,7 @@ export async function setDailyCoverage(
   dayShiftTarget: number,
   nightShiftTarget: number,
 ) {
+  await requireWrite();
   const parsed = dailyCoverageSchema.safeParse({
     dateStr,
     dayShiftTarget,
@@ -82,6 +86,7 @@ export async function setDailyCoverage(
 }
 
 export async function clearDailyCoverage(dateStr: string) {
+  await requireWrite();
   const date = parseDateKey(dateStr);
   await prisma.dailyCoverage.deleteMany({ where: { date } });
   const year = date.getUTCFullYear();

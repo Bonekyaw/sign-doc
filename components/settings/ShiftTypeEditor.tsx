@@ -10,7 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ShiftTypeConfig } from "@/app/generated/prisma/client";
 
-export function ShiftTypeEditor({ types }: { types: ShiftTypeConfig[] }) {
+export function ShiftTypeEditor({
+  types,
+  canWrite = true,
+}: {
+  types: ShiftTypeConfig[];
+  canWrite?: boolean;
+}) {
   const router = useRouter();
 
   async function save(id: string, form: FormData, isActive: boolean) {
@@ -88,9 +94,11 @@ export function ShiftTypeEditor({ types }: { types: ShiftTypeConfig[] }) {
                   />
                   Active
                 </label>
+                {canWrite ? (
                 <Button type="submit" size="sm" className="w-full sm:w-auto">
                   Save
                 </Button>
+                ) : null}
               </form>
             </CardContent>
           </Card>

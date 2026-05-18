@@ -15,13 +15,18 @@ import {
   loadShiftTypes,
   shiftCodeFromId,
 } from "@/lib/scheduling/context";
-import { dateKey, getMonthDateKeys, parseDateKey } from "@/lib/scheduling/dates";
+import { getMonthDateKeys, parseDateKey } from "@/lib/scheduling/dates";
 import { countBandForDate } from "@/lib/scheduling/validate-coverage";
 import { computeMonthlyHours } from "@/lib/scheduling/compute-hours";
 import { validateAssignment } from "@/lib/scheduling/validate-assignment";
 import type { ShiftCode } from "@/lib/scheduling/types";
+import {
+  requireAdminRead,
+  requireDoctor,
+  requireWrite,
+} from "@/lib/auth/guards";
 
-export async function getMonthSchedule(year: number, month: number) {
+async function getMonthScheduleInternal(year: number, month: number) {
   const monthKeys = getMonthDateKeys(year, month);
   const start = parseDateKey(monthKeys[0]);
   const end = parseDateKey(monthKeys[monthKeys.length - 1]);
@@ -82,6 +87,31 @@ export async function getMonthSchedule(year: number, month: number) {
   };
 }
 
+export async function getMonthSchedule(year: number, month: number) {
+  await requireAdminRead();
+  return getMonthScheduleInternal(year, month);
+}
+
+export async function getMyMonthSchedule(year: number, month: number) {
+  const session = await requireDoctor();
+  const data = await getMonthScheduleInternal(year, month);
+  const doctor = data.doctors.find((d) => d.id === session.doctorId);
+  if (!doctor) {
+    throw new Error("Linked doctor record not found.");
+  }
+
+  const shiftRows = data.shiftRows.filter((r) => r.doctorId === session.doctorId);
+  const shifts = data.shifts.filter((s) => s.doctorId === session.doctorId);
+
+  return {
+    ...data,
+    doctors: [doctor],
+    shiftRows,
+    shifts,
+    hourSummary: data.hourSummary.filter((h) => h.doctorId === session.doctorId),
+  };
+}
+
 export async function assignShift(data: {
   doctorId: string;
   dateStr: string;
@@ -89,6 +119,7 @@ export async function assignShift(data: {
   year: number;
   month: number;
 }) {
+  await requireWrite();
   const { doctorId, dateStr, shiftTypeId, year, month } = data;
   const date = parseDateKey(dateStr);
   const [doctors, shiftTypes, existingShifts, coverageTarget] =
@@ -138,6 +169,7 @@ export async function clearShift(data: {
   year: number;
   month: number;
 }) {
+  await requireWrite();
   const date = parseDateKey(data.dateStr);
   await prisma.shift.deleteMany({
     where: { doctorId: data.doctorId, date },
@@ -155,6 +187,7 @@ export async function validateShiftPreview(data: {
   year: number;
   month: number;
 }) {
+  await requireWrite();
   const date = parseDateKey(data.dateStr);
   const [doctors, shiftTypes, existingShifts, coverageTarget] =
     await Promise.all([
@@ -182,6 +215,7 @@ export async function validateShiftPreview(data: {
 }
 
 export async function suggestSchedule(year: number, month: number) {
+  await requireWrite();
   const [
     doctors,
     shiftTypes,
@@ -222,6 +256,7 @@ export async function applyAutoAssign(
     shiftTypeId: string;
   }[],
 ) {
+  await requireWrite();
   for (const p of proposals) {
     await prisma.shift.upsert({
       where: {

@@ -34,6 +34,7 @@ type Props = {
   dayTarget: number;
   nightTarget: number;
   monthKeys: string[];
+  canWrite?: boolean;
 };
 
 export function CoverageEditor({
@@ -42,6 +43,7 @@ export function CoverageEditor({
   dayTarget,
   nightTarget,
   monthKeys,
+  canWrite = true,
 }: Props) {
   const router = useRouter();
   const form = useForm<CoverageTargetInput>({
@@ -137,7 +139,7 @@ export function CoverageEditor({
                 {form.formState.errors.dayShiftTarget.message}
               </p>
             )}
-            <Button type="submit">Save defaults</Button>
+            {canWrite ? <Button type="submit">Save defaults</Button> : null}
           </form>
         </CardContent>
       </Card>
@@ -153,6 +155,7 @@ export function CoverageEditor({
                 key={key}
                 dateKey={key}
                 defaults={{ dayTarget, nightTarget }}
+                canWrite={canWrite}
                 onSaved={() => router.refresh()}
               />
             ))}
@@ -166,10 +169,12 @@ export function CoverageEditor({
 function DailyOverrideRow({
   dateKey,
   defaults,
+  canWrite,
   onSaved,
 }: {
   dateKey: string;
   defaults: { dayTarget: number; nightTarget: number };
+  canWrite: boolean;
   onSaved: () => void;
 }) {
   const form = useForm<CoverageTargetInput>({
@@ -233,6 +238,8 @@ function DailyOverrideRow({
           ))}
         </SelectContent>
       </Select>
+      {canWrite ? (
+      <>
       <Button type="submit" size="sm" variant="outline">
         Override
       </Button>
@@ -247,6 +254,8 @@ function DailyOverrideRow({
       >
         Clear
       </Button>
+      </>
+      ) : null}
     </form>
   );
 }

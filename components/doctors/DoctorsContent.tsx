@@ -1,7 +1,9 @@
 import { getCachedDoctorList, getCachedRotationTemplates } from "@/lib/data/cached";
 import { DoctorManager } from "@/components/doctors/DoctorManager";
+import { canWrite, getSession } from "@/lib/auth/guards";
 
 export async function DoctorsContent() {
+  const session = await getSession();
   const [doctors, rotationTemplates] = await Promise.all([
     getCachedDoctorList(),
     getCachedRotationTemplates(),
@@ -14,6 +16,7 @@ export async function DoctorsContent() {
         id: t.id,
         name: t.name,
       }))}
+      canWrite={session ? canWrite(session.role) : false}
     />
   );
 }

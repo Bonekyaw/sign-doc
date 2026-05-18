@@ -40,8 +40,10 @@ const STEP_OPTIONS: { value: RotationStepType; label: string }[] = [
 
 export function RotationTemplateEditor({
   templates,
+  canWrite = true,
 }: {
   templates: TemplateRow[];
+  canWrite?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<TemplateRow | null>(null);
@@ -173,6 +175,7 @@ export function RotationTemplateEditor({
                 Add step
               </Button>
             </div>
+            {canWrite ? (
             <div className="flex flex-wrap gap-2">
               <Button type="submit">{editing ? "Update" : "Create"}</Button>
               {editing && (
@@ -181,6 +184,7 @@ export function RotationTemplateEditor({
                 </Button>
               )}
             </div>
+            ) : null}
           </form>
         </CardContent>
       </Card>
@@ -208,6 +212,7 @@ export function RotationTemplateEditor({
                     .join(" → ")}
                 </p>
               </div>
+              {canWrite ? (
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => loadTemplate(t)}>
                   Edit
@@ -229,6 +234,7 @@ export function RotationTemplateEditor({
                   Delete
                 </Button>
               </div>
+              ) : null}
             </div>
           ))}
           {templates.length === 0 && (

@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { prisma } from "../lib/db";
+import { hashPassword } from "../lib/auth/password";
 
 const shiftTypes = [
   {
@@ -78,6 +79,26 @@ async function main() {
         },
       },
     });
+  }
+
+  const userCount = await prisma.user.count();
+  if (userCount === 0) {
+    const username = process.env.BOOTSTRAP_OWNER_USERNAME;
+    const password = process.env.BOOTSTRAP_OWNER_PASSWORD;
+    if (!username || !password) {
+      console.warn(
+        "No users found. Set BOOTSTRAP_OWNER_USERNAME and BOOTSTRAP_OWNER_PASSWORD to create the initial owner.",
+      );
+    } else {
+      await prisma.user.create({
+        data: {
+          username,
+          passwordHash: await hashPassword(password),
+          role: "OWNER",
+        },
+      });
+      console.log(`Created bootstrap owner: ${username}`);
+    }
   }
 
   console.log("Seed completed.");

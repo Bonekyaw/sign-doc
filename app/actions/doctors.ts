@@ -6,8 +6,10 @@ import { prisma } from "@/lib/db";
 import { defaultTargetHours, parseDateKey } from "@/lib/scheduling/dates";
 import { doctorSchema } from "@/lib/schemas/doctor";
 import type { DoctorType } from "@/app/generated/prisma/client";
+import { requireAdminRead, requireWrite } from "@/lib/auth/guards";
 
 export async function listDoctors() {
+  await requireAdminRead();
   return prisma.doctor.findMany({
     include: {
       restrictions: true,
@@ -47,6 +49,7 @@ export async function createDoctor(input: {
   rotationTemplateId?: string | null;
   rotationStartDate?: string | null;
 }) {
+  await requireWrite();
   const girlsOff = input.girlsOff24h ?? input.noTwentyFour ?? false;
   const limit =
     input.monthlyHourLimit ??
@@ -102,6 +105,7 @@ export async function updateDoctor(
     rotationStartDate?: string | null;
   },
 ) {
+  await requireWrite();
   const girlsOff = input.girlsOff24h ?? input.noTwentyFour ?? false;
   const limit = input.monthlyHourLimit ?? input.targetHours ?? 240;
 
@@ -146,6 +150,7 @@ export async function updateDoctor(
 }
 
 export async function deleteDoctor(id: string) {
+  await requireWrite();
   await prisma.doctor.delete({ where: { id } });
   revalidatePath("/doctors");
   revalidatePath("/schedule");

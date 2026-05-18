@@ -1,18 +1,15 @@
-import { getMonthSchedule } from "@/app/actions/schedule";
+import { getMyMonthSchedule } from "@/app/actions/schedule";
 import { ScheduleView } from "@/components/schedule/ScheduleView";
-import { canWrite, getSession } from "@/lib/auth/guards";
 import { dateKey } from "@/lib/scheduling/dates";
 
-export async function ScheduleMonthContent({
+export async function MyScheduleContent({
   year,
   month,
 }: {
   year: number;
   month: number;
 }) {
-  const session = await getSession();
-  const data = await getMonthSchedule(year, month);
-  const writable = session ? canWrite(session.role) : false;
+  const data = await getMyMonthSchedule(year, month);
 
   const assignments = data.shiftRows.map((row) => ({
     doctorId: row.doctorId,
@@ -44,7 +41,8 @@ export async function ScheduleMonthContent({
       monthKeys={data.monthKeys}
       coverageByDate={data.coverageByDate}
       hourSummary={data.hourSummary}
-      readOnly={!writable}
+      readOnly
+      scheduleBasePath="/my-schedule"
     />
   );
 }

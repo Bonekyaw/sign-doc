@@ -20,7 +20,7 @@ export function SelectTrigger({
       )}
       {...props}
     >
-      <SelectPrimitive.Value />
+      <SelectPrimitive.Value className="text-black" />
       <SelectPrimitive.Icon>
         <ChevronDown className="h-4 w-4 text-neutral-500" />
       </SelectPrimitive.Icon>
@@ -48,15 +48,18 @@ export function SelectContent({
 
 export function SelectItem({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Item>) {
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex cursor-pointer select-none items-center rounded-lg px-3 py-2.5 text-sm text-black outline-none hover:bg-neutral-100 data-[highlighted]:bg-neutral-100",
+        "relative flex cursor-pointer select-none items-center rounded-lg px-3 py-2.5 text-sm text-black outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[highlighted]:bg-neutral-100 data-[state=checked]:font-medium",
         className,
       )}
       {...props}
-    />
+    >
+      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    </SelectPrimitive.Item>
   );
 }

@@ -9,23 +9,47 @@ import {
   RefreshCw,
   Settings2,
   SlidersHorizontal,
+  UserCog,
   Users,
 } from "lucide-react";
+import type { UserRole } from "@/app/generated/prisma/client";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/skeletons/Skeleton";
 
-const links = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/schedule", label: "Schedule", icon: CalendarDays },
-  { href: "/doctors", label: "Doctors", icon: Users },
-  { href: "/settings/shift-types", label: "Shift types", icon: Settings2 },
-  { href: "/settings/coverage", label: "Coverage", icon: SlidersHorizontal },
-  {
-    href: "/settings/rotation-templates",
-    label: "Rotations",
-    icon: RefreshCw,
-  },
-];
+type NavLink = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+};
+
+function linksForRole(role: UserRole | null): NavLink[] {
+  if (role === "DOCTOR") {
+    return [{ href: "/my-schedule", label: "My schedule", icon: CalendarDays }];
+  }
+
+  const adminLinks: NavLink[] = [
+    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/schedule", label: "Schedule", icon: CalendarDays },
+    { href: "/doctors", label: "Doctors", icon: Users },
+    { href: "/settings/shift-types", label: "Shift types", icon: Settings2 },
+    { href: "/settings/coverage", label: "Coverage", icon: SlidersHorizontal },
+    {
+      href: "/settings/rotation-templates",
+      label: "Rotations",
+      icon: RefreshCw,
+    },
+  ];
+
+  if (role === "OWNER") {
+    adminLinks.push({
+      href: "/settings/users",
+      label: "Users",
+      icon: UserCog,
+    });
+  }
+
+  return adminLinks;
+}
 
 function AdminNavFallback() {
   return (
@@ -38,8 +62,15 @@ function AdminNavFallback() {
   );
 }
 
-function AdminNavInner({ onNavigate }: { onNavigate?: () => void }) {
+function AdminNavInner({
+  role,
+  onNavigate,
+}: {
+  role: UserRole | null;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
+  const links = linksForRole(role);
 
   return (
     <nav className="flex flex-col gap-1 p-4">
@@ -49,8 +80,9 @@ function AdminNavInner({ onNavigate }: { onNavigate?: () => void }) {
       {links.map((link) => {
         const Icon = link.icon;
         const active =
-          link.label === "Schedule"
-            ? pathname.startsWith("/schedule")
+          link.label === "Schedule" || link.label === "My schedule"
+            ? pathname.startsWith("/schedule") ||
+              pathname.startsWith("/my-schedule")
             : pathname === link.href || pathname.startsWith(link.href + "/");
         return (
           <Link
@@ -78,10 +110,16 @@ function AdminNavInner({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
+export function AdminNav({
+  role,
+  onNavigate,
+}: {
+  role: UserRole | null;
+  onNavigate?: () => void;
+}) {
   return (
     <Suspense fallback={<AdminNavFallback />}>
-      <AdminNavInner onNavigate={onNavigate} />
+      <AdminNavInner role={role} onNavigate={onNavigate} />
     </Suspense>
   );
 }
