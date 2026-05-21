@@ -172,14 +172,16 @@ function scheduleCellTdClass(
 function ScheduleCellContent({
   assignment,
   isSeniorDoctor = false,
+  showSeniorStar = true,
 }: {
   assignment?: ShiftRow;
   isSeniorDoctor?: boolean;
+  showSeniorStar?: boolean;
 }) {
-  const showSeniorStar = isSeniorDoctor && !!assignment;
+  const showStar = showSeniorStar && isSeniorDoctor && !!assignment;
   return (
     <>
-      {showSeniorStar ? (
+      {showStar ? (
         <Star
           className="pointer-events-none absolute top-0.5 right-0.5 size-3 fill-amber-400 text-amber-500"
           aria-hidden
@@ -220,10 +222,12 @@ function ShiftCellBadge({
 function ReadOnlyScheduleCell({
   assignment,
   isSeniorDoctor = false,
+  showSeniorStar = true,
   onClick,
 }: {
   assignment?: ShiftRow;
   isSeniorDoctor?: boolean;
+  showSeniorStar?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -247,6 +251,7 @@ function ReadOnlyScheduleCell({
       <ScheduleCellContent
         assignment={assignment}
         isSeniorDoctor={isSeniorDoctor}
+        showSeniorStar={showSeniorStar}
       />
     </td>
   );
@@ -1211,6 +1216,7 @@ export function ScheduleView({
             <ReadOnlyScheduleCell
               assignment={assignmentMap.get(`${doc.id}__${dateStr}`)}
               isSeniorDoctor={doc.seniority === "SENIOR"}
+              showSeniorStar={!doctorPortal}
             />
           )}
         />
