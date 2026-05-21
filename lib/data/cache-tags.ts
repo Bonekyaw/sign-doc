@@ -17,3 +17,7 @@ export function coverageTag(year: number, month: number) {
 export function rotationTemplatesTag() {
   return "rotation-templates";
 }
+
+export function schedulingRulesTag() {
+  return "scheduling-rules";
+}

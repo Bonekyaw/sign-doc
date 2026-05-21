@@ -13,6 +13,12 @@ enum DoctorType {
   PT
 }
 
+enum DoctorSeniority {
+  SENIOR
+  MID_LEVEL
+  JUNIOR
+}
+
 enum RestrictionType {
   NO_TWENTY_FOUR
 }
@@ -37,6 +43,16 @@ enum UserRole {
   OWNER
 }
 
+enum ShiftSource {
+  MANUAL
+  AUTO
+}
+
+enum MonthScheduleStatus {
+  DRAFT
+  PUBLISHED
+}
+
 model ShiftTypeConfig {
   id            String   @id @default(cuid())
   code          String   @unique
@@ -56,7 +72,9 @@ model Doctor {
   id            String              @id @default(cuid())
   name          String
   type          DoctorType
-  targetHours   Int                 @map("target_hours")
+  seniority     DoctorSeniority     @default(MID_LEVEL)
+  /// Monthly hour target (240 for full-time; set from Doctor.type in app/seed).
+  targetMonthlyHours Int            @map("target_hours")
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
   shifts        Shift[]
@@ -76,6 +94,25 @@ model DoctorRestriction {
 
   @@unique([doctorId, type])
   @@map("doctor_restrictions")
+}
+
+model SchedulingRules {
+  id                       String   @id @default("default")
+  post24MinRestDays        Int      @default(1) @map("post24_min_rest_days")
+  blockNightBefore24       Boolean  @default(true) @map("block_night_before24")
+  blockLongDayBefore24     Boolean  @default(false) @map("block_long_day_before24")
+  maxConsecutiveLongDay    Int      @default(3) @map("max_consecutive_long_day")
+  maxConsecutiveNight      Int      @default(3) @map("max_consecutive_night")
+  maxConsecutiveOffDays    Int      @default(3) @map("max_consecutive_off_days")
+  minDaysOffPerMonth       Int      @default(4) @map("min_days_off_per_month")
+  requireSeniorOnDayBand   Boolean  @default(true) @map("require_senior_on_day_band")
+  requireSeniorOnNightBand Boolean  @default(true) @map("require_senior_on_night_band")
+  ftDefaultTargetHours     Int      @default(240) @map("ft_default_target_hours")
+  halfTimeDefaultTargetHours Int    @default(120) @map("half_time_default_target_hours")
+  ptDefaultTargetHours     Int      @default(80) @map("pt_default_target_hours")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@map("scheduling_rules")
 }
 
 model MonthSettings {
@@ -98,17 +135,32 @@ model DailyCoverage {
   @@map("daily_coverage")
 }
 
+model MonthSchedule {
+  id          String              @id @default(cuid())
+  year        Int
+  month       Int
+  status      MonthScheduleStatus @default(DRAFT)
+  publishedAt DateTime?           @map("published_at")
+  publishedBy String?             @map("published_by")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  @@unique([year, month])
+  @@map("month_schedules")
+}
+
 model Shift {
   id          String          @id @default(cuid())
   date        DateTime        @db.Date
   shiftTypeId String          @map("shift_type_id")
   doctorId    String          @map("doctor_id")
+  source      ShiftSource     @default(MANUAL)
   shiftType   ShiftTypeConfig @relation(fields: [shiftTypeId], references: [id])
   doctor      Doctor          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
   @@unique([doctorId, date])
   @@index([date])
   @@index([date, shiftTypeId])
+  @@index([date, source])
   @@map("shifts")
 }
 

@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   RefreshCw,
   Settings2,
+  Scale,
   SlidersHorizontal,
   UserCog,
   Users,
@@ -34,13 +35,18 @@ function linksForRole(role: UserRole | null): NavLink[] {
     { href: "/settings/shift-types", label: "Shift types", icon: Settings2 },
     { href: "/settings/coverage", label: "Coverage", icon: SlidersHorizontal },
     {
+      href: "/settings/scheduling-rules",
+      label: "Scheduling rules",
+      icon: Scale,
+    },
+    {
       href: "/settings/rotation-templates",
       label: "Rotations",
       icon: RefreshCw,
     },
   ];
 
-  if (role === "OWNER") {
+  if (role === "OWNER" || role === "ADMIN") {
     adminLinks.push({
       href: "/settings/users",
       label: "Users",
@@ -64,9 +70,11 @@ function AdminNavFallback() {
 
 function AdminNavInner({
   role,
+  doctorCount,
   onNavigate,
 }: {
   role: UserRole | null;
+  doctorCount?: number;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -102,7 +110,19 @@ function AdminNavInner({
                 active ? "text-white" : "text-neutral-500 group-hover:text-black",
               )}
             />
-            {link.label}
+            <span className="min-w-0 flex-1">{link.label}</span>
+            {link.href === "/doctors" && doctorCount != null ? (
+              <span
+                className={cn(
+                  "shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+                  active
+                    ? "bg-white/20 text-white"
+                    : "bg-neutral-100 text-neutral-600 group-hover:bg-neutral-200",
+                )}
+              >
+                {doctorCount}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -112,14 +132,20 @@ function AdminNavInner({
 
 export function AdminNav({
   role,
+  doctorCount,
   onNavigate,
 }: {
   role: UserRole | null;
+  doctorCount?: number;
   onNavigate?: () => void;
 }) {
   return (
     <Suspense fallback={<AdminNavFallback />}>
-      <AdminNavInner role={role} onNavigate={onNavigate} />
+      <AdminNavInner
+        role={role}
+        doctorCount={doctorCount}
+        onNavigate={onNavigate}
+      />
     </Suspense>
   );
 }

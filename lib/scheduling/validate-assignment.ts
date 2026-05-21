@@ -1,9 +1,13 @@
 import { validateShift } from "@/lib/validate-shift";
+import type { SchedulingRulesConfig } from "@/lib/scheduling/rules-types";
+import { DEFAULT_SCHEDULING_RULES } from "@/lib/scheduling/rules-types";
 import { validateCoverage } from "@/lib/scheduling/validate-coverage";
 import { validateDayManpower } from "@/lib/scheduling/validate-day-manpower";
 import { validateHours } from "@/lib/scheduling/validate-hours";
 import { warnMinDaysOff } from "@/lib/scheduling/validate-min-days-off";
 import { validateRestrictions } from "@/lib/scheduling/validate-restrictions";
+import { validateSeniorManpowerForDate } from "@/lib/scheduling/validate-senior-manpower";
+import { validateOffStreakOnAssign } from "@/lib/scheduling/validate-consecutive-off";
 import type {
   CoverageTarget,
   DoctorInfo,
@@ -13,6 +17,8 @@ import type {
   ValidationResult,
 } from "@/lib/scheduling/types";
 
+export type AssignmentPurpose = "coverage" | "hoursFill" | "manualEdit";
+
 export function validateAssignment(params: {
   doctor: DoctorInfo;
   date: Date;
@@ -21,6 +27,9 @@ export function validateAssignment(params: {
   existingShifts: ShiftAssignment[];
   monthKeys: string[];
   coverageTarget: CoverageTarget;
+  doctors: DoctorInfo[];
+  rules?: SchedulingRulesConfig;
+  purpose?: AssignmentPurpose;
 }): ValidationResult {
   const {
     doctor,
@@ -30,8 +39,13 @@ export function validateAssignment(params: {
     existingShifts,
     monthKeys,
     coverageTarget,
+    doctors,
+    rules = DEFAULT_SCHEDULING_RULES,
+    purpose = "coverage",
   } = params;
 
+  const allowOverCoverage =
+    purpose === "hoursFill" || purpose === "manualEdit";
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -51,6 +65,7 @@ export function validateAssignment(params: {
     date,
     shiftCode,
     existingShifts,
+    rules,
   );
   if (fatigueError) errors.push(fatigueError);
 
@@ -59,6 +74,7 @@ export function validateAssignment(params: {
     monthKeys,
     existingShifts,
     config.durationHours,
+    date,
   );
   if (hoursError) errors.push(hoursError);
 
@@ -68,6 +84,7 @@ export function validateAssignment(params: {
     existingShifts,
     coverageTarget,
     doctor.id,
+    { allowOverCoverage },
   );
   if (coverageError) errors.push(coverageError);
   if (coverageWarning) warnings.push(coverageWarning);
@@ -91,11 +108,27 @@ export function validateAssignment(params: {
     date,
     proposedShifts,
     coverageTarget,
+    undefined,
+    { allowOverCoverage },
   );
   errors.push(...dayManpower.errors);
   warnings.push(...dayManpower.warnings);
 
-  const offWarning = warnMinDaysOff(doctor, monthKeys, proposedShifts);
+  warnings.push(
+    ...validateSeniorManpowerForDate(date, proposedShifts, doctors, rules),
+  );
+
+  const offStreakError = validateOffStreakOnAssign(
+    doctor.id,
+    doctor.name,
+    date,
+    monthKeys,
+    existingShifts,
+    rules,
+  );
+  if (offStreakError) errors.push(offStreakError);
+
+  const offWarning = warnMinDaysOff(doctor, monthKeys, proposedShifts, rules);
   if (offWarning) warnings.push(offWarning);
 
   return { ok: errors.length === 0, errors, warnings };

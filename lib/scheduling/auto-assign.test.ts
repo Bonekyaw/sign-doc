@@ -7,6 +7,7 @@ import {
   isOnApprovedLeave,
 } from "@/lib/scheduling/eligibility";
 import { autoAssign, rankCandidates } from "@/lib/scheduling/auto-assign";
+import { DEFAULT_SCHEDULING_RULES } from "@/lib/scheduling/rules-types";
 import type {
   DoctorInfo,
   ShiftAssignment,
@@ -37,12 +38,14 @@ const doctors: DoctorInfo[] = [
     id: "d1",
     name: "Alice",
     targetHours: 240,
+    seniority: "SENIOR",
     restrictions: [],
   },
   {
     id: "d2",
     name: "Bob",
     targetHours: 240,
+    seniority: "SENIOR",
     restrictions: ["NO_TWENTY_FOUR"],
   },
 ];
@@ -71,6 +74,7 @@ describe("eligibility", () => {
       monthKeys: ["2026-05-10"],
       coverageTarget: { dayShiftTarget: 3, nightShiftTarget: 2 },
       leaveByDoctor: leave,
+      rules: DEFAULT_SCHEDULING_RULES,
     });
     assert.equal(
       eligible.some((e) => e.doctor.id === "d1"),
@@ -104,6 +108,22 @@ describe("remainingMonthlyHours", () => {
 });
 
 describe("rankCandidates", () => {
+  it("prefers Senior doctors when the band still needs senior coverage", () => {
+    const monthKeys = ["2026-05-01", "2026-05-02"];
+    const ranked = rankCandidates(
+      doctors.map((d) => ({ doctor: d })),
+      monthKeys,
+      [],
+      parseDateKey("2026-05-02"),
+      "L",
+      new Map(),
+      doctors,
+      DEFAULT_SCHEDULING_RULES,
+    );
+    assert.equal(ranked[0]?.doctor.id, "d1");
+    assert.equal(ranked[1]?.doctor.id, "d2");
+  });
+
   it("orders by remaining hours when rotation match is equal", () => {
     const monthKeys = ["2026-05-01", "2026-05-02"];
     const workingShifts: ShiftAssignment[] = [
@@ -121,6 +141,8 @@ describe("rankCandidates", () => {
       parseDateKey("2026-05-02"),
       "L",
       new Map(),
+      doctors,
+      DEFAULT_SCHEDULING_RULES,
     );
     assert.equal(ranked[0]?.doctor.id, "d2");
     assert.equal(ranked[1]?.doctor.id, "d1");
@@ -146,6 +168,7 @@ describe("autoAssign gap-fill", () => {
       monthDefaults: { dayShiftTarget: 3, nightShiftTarget: 2 },
       dailyOverrides: new Map(),
       leaveByDoctor: new Map(),
+      rules: DEFAULT_SCHEDULING_RULES,
     });
     const may1L = result.proposals.filter(
       (p) => p.date === "2026-05-01" && p.shiftCode === "L",

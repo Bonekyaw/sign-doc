@@ -26,12 +26,42 @@ function roleLabel(role: UserRole) {
 export function AdminShell({
   children,
   session,
+  doctorCount,
+  minimal = false,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   session: PortalSession;
+  doctorCount?: number;
+  minimal?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const subtitle = session ? `${roleLabel(session.role)} · ${session.username}` : "Admin portal";
+
+  if (minimal) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md sm:px-6">
+          <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 text-sm font-bold text-white shadow-md shadow-sky-500/30">
+                DS
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-black">
+                  Duty Schedule
+                </p>
+                <p className="truncate text-xs text-neutral-500">{subtitle}</p>
+              </div>
+            </div>
+            <LogoutButton />
+          </div>
+        </header>
+        <main className="mx-auto max-w-[1600px] px-3 py-4 sm:px-4 sm:py-6">
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,7 +109,11 @@ export function AdminShell({
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <AdminNav role={session?.role ?? null} onNavigate={() => setMobileOpen(false)} />
+          <AdminNav
+            role={session?.role ?? null}
+            doctorCount={doctorCount}
+            onNavigate={() => setMobileOpen(false)}
+          />
         </div>
         <div className="border-t border-neutral-200/80 p-4">
           <LogoutButton />
@@ -100,7 +134,7 @@ export function AdminShell({
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <AdminNav role={session?.role ?? null} />
+            <AdminNav role={session?.role ?? null} doctorCount={doctorCount} />
           </div>
           <div className="border-t border-neutral-200/80 p-4">
             <LogoutButton />
@@ -108,7 +142,7 @@ export function AdminShell({
         </aside>
 
         <main className="flex-1 overflow-auto">
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
+          <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
             {children}
           </div>
         </main>

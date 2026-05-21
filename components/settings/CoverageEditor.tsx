@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -9,24 +10,19 @@ import {
   setMonthDefaults,
 } from "@/app/actions/coverage";
 import {
-  ALLOWED_DAY_TARGETS,
-  ALLOWED_NIGHT_TARGETS,
+  normalizeManpowerTargets,
+  presetIdToTargets,
+  targetsToPresetId,
+  type ManpowerPresetId,
 } from "@/lib/scheduling/constants";
 import {
   coverageTargetSchema,
   type CoverageTargetInput,
 } from "@/lib/schemas/coverage";
+import { ManpowerPresetSelect } from "@/components/settings/ManpowerPresetSelect";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 type Props = {
   year: number;
@@ -46,30 +42,27 @@ export function CoverageEditor({
   canWrite = true,
 }: Props) {
   const router = useRouter();
+  const [savingDefaults, setSavingDefaults] = useState(false);
+  const normalized = normalizeManpowerTargets(dayTarget, nightTarget);
+
   const form = useForm<CoverageTargetInput>({
     resolver: zodResolver(coverageTargetSchema),
-    defaultValues: {
-      dayShiftTarget: (ALLOWED_DAY_TARGETS.includes(
-        dayTarget as (typeof ALLOWED_DAY_TARGETS)[number],
-      )
-        ? dayTarget
-        : 4) as CoverageTargetInput["dayShiftTarget"],
-      nightShiftTarget: (ALLOWED_NIGHT_TARGETS.includes(
-        nightTarget as (typeof ALLOWED_NIGHT_TARGETS)[number],
-      )
-        ? nightTarget
-        : 3) as CoverageTargetInput["nightShiftTarget"],
-    },
+    defaultValues: normalized,
   });
 
   async function onSubmit(data: CoverageTargetInput) {
-    await setMonthDefaults(
-      year,
-      month,
-      data.dayShiftTarget,
-      data.nightShiftTarget,
-    );
-    router.refresh();
+    setSavingDefaults(true);
+    try {
+      await setMonthDefaults(
+        year,
+        month,
+        data.dayShiftTarget,
+        data.nightShiftTarget,
+      );
+      router.refresh();
+    } finally {
+      setSavingDefaults(false);
+    }
   }
 
   return (
@@ -77,7 +70,7 @@ export function CoverageEditor({
       <PageHeader
         eyebrow="Settings"
         title="Coverage requirements"
-        description="Day shift: 3 or 4 doctors. Night shift: 2 or 3 doctors."
+        description="Choose one manpower ratio for the month: L3-N3, L3-N2, or L4-N3 (Long day and Night doctor counts)."
       />
 
       <Card className="max-w-md">
@@ -88,58 +81,31 @@ export function CoverageEditor({
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div>
-              <Label>Day shift doctors (Long Day)</Label>
-              <Select
-                value={String(form.watch("dayShiftTarget"))}
-                onValueChange={(v) =>
-                  form.setValue(
-                    "dayShiftTarget",
-                    Number(v) as CoverageTargetInput["dayShiftTarget"],
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ALLOWED_DAY_TARGETS.map((n) => (
-                    <SelectItem key={n} value={String(n)}>
-                      {n} doctors
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Night shift doctors</Label>
-              <Select
-                value={String(form.watch("nightShiftTarget"))}
-                onValueChange={(v) =>
-                  form.setValue(
-                    "nightShiftTarget",
-                    Number(v) as CoverageTargetInput["nightShiftTarget"],
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ALLOWED_NIGHT_TARGETS.map((n) => (
-                    <SelectItem key={n} value={String(n)}>
-                      {n} doctors
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <ManpowerPresetSelect
+              dayTarget={form.watch("dayShiftTarget")}
+              nightTarget={form.watch("nightShiftTarget")}
+              onChange={(day, night) => {
+                form.setValue("dayShiftTarget", day, { shouldDirty: true });
+                form.setValue("nightShiftTarget", night, {
+                  shouldDirty: true,
+                });
+              }}
+            />
             {form.formState.errors.dayShiftTarget && (
               <p className="text-sm text-red-600">
                 {form.formState.errors.dayShiftTarget.message}
               </p>
             )}
-            {canWrite ? <Button type="submit">Save defaults</Button> : null}
+            {form.formState.errors.root && (
+              <p className="text-sm text-red-600">
+                {form.formState.errors.root.message}
+              </p>
+            )}
+            {canWrite ? (
+              <Button type="submit" disabled={savingDefaults}>
+                {savingDefaults ? "Loading…" : "Save defaults"}
+              </Button>
+            ) : null}
           </form>
         </CardContent>
       </Card>
@@ -154,7 +120,10 @@ export function CoverageEditor({
               <DailyOverrideRow
                 key={key}
                 dateKey={key}
-                defaults={{ dayTarget, nightTarget }}
+                defaults={{
+                  dayTarget: normalized.dayShiftTarget,
+                  nightTarget: normalized.nightShiftTarget,
+                }}
                 canWrite={canWrite}
                 onSaved={() => router.refresh()}
               />
@@ -177,84 +146,70 @@ function DailyOverrideRow({
   canWrite: boolean;
   onSaved: () => void;
 }) {
-  const form = useForm<CoverageTargetInput>({
-    resolver: zodResolver(coverageTargetSchema),
-    defaultValues: {
-      dayShiftTarget: 4 as CoverageTargetInput["dayShiftTarget"],
-      nightShiftTarget: 3 as CoverageTargetInput["nightShiftTarget"],
-    },
-  });
+  const [busy, setBusy] = useState<"override" | "clear" | null>(null);
+  const [dayTarget, setDayTarget] = useState(defaults.dayTarget);
+  const [nightTarget, setNightTarget] = useState(defaults.nightTarget);
+
+  const presetId =
+    targetsToPresetId(dayTarget, nightTarget) ??
+    (targetsToPresetId(defaults.dayTarget, defaults.nightTarget) ?? "L4-N3");
 
   return (
     <form
-      onSubmit={form.handleSubmit(async (data) => {
-        await setDailyCoverage(
-          dateKey,
-          data.dayShiftTarget,
-          data.nightShiftTarget,
-        );
-        onSaved();
-      })}
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy("override");
+        try {
+          await setDailyCoverage(dateKey, dayTarget, nightTarget);
+          onSaved();
+        } finally {
+          setBusy(null);
+        }
+      }}
       className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-100 bg-sky-50/30 p-3 text-sm"
     >
       <span className="w-28 font-mono text-slate-700">{dateKey}</span>
-      <Select
-        value={String(form.watch("dayShiftTarget"))}
-        onValueChange={(v) =>
-          form.setValue(
-            "dayShiftTarget",
-            Number(v) as CoverageTargetInput["dayShiftTarget"],
-          )
-        }
-      >
-        <SelectTrigger className="h-10 w-24">
-          <SelectValue placeholder={`D:${defaults.dayTarget}`} />
-        </SelectTrigger>
-        <SelectContent>
-          {ALLOWED_DAY_TARGETS.map((n) => (
-            <SelectItem key={n} value={String(n)}>
-              {n}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        value={String(form.watch("nightShiftTarget"))}
-        onValueChange={(v) =>
-          form.setValue(
-            "nightShiftTarget",
-            Number(v) as CoverageTargetInput["nightShiftTarget"],
-          )
-        }
-      >
-        <SelectTrigger className="h-10 w-24">
-          <SelectValue placeholder={`N:${defaults.nightTarget}`} />
-        </SelectTrigger>
-        <SelectContent>
-          {ALLOWED_NIGHT_TARGETS.map((n) => (
-            <SelectItem key={n} value={String(n)}>
-              {n}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {canWrite ? (
-      <>
-      <Button type="submit" size="sm" variant="outline">
-        Override
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onClick={async () => {
-          await clearDailyCoverage(dateKey);
-          onSaved();
+      <ManpowerPresetSelect
+        dayTarget={dayTarget}
+        nightTarget={nightTarget}
+        showHint={false}
+        className="min-w-[10rem] flex-1"
+        onChange={(day, night) => {
+          setDayTarget(day);
+          setNightTarget(night);
         }}
-      >
-        Clear
-      </Button>
-      </>
+      />
+      {canWrite ? (
+        <>
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            disabled={busy !== null}
+          >
+            {busy === "override" ? "Loading…" : "Override"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={busy !== null}
+            onClick={async () => {
+              setBusy("clear");
+              try {
+                await clearDailyCoverage(dateKey);
+                const reset = presetIdToTargets(presetId as ManpowerPresetId);
+                setDayTarget(reset.dayShiftTarget);
+                setNightTarget(reset.nightShiftTarget);
+                onSaved();
+              } finally {
+                setBusy(null);
+              }
+            }}
+          >
+            {busy === "clear" ? "Loading…" : "Clear"}
+          </Button>
+        </>
       ) : null}
     </form>
   );

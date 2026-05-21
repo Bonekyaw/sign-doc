@@ -1,6 +1,7 @@
 import { getMonthSchedule } from "@/app/actions/schedule";
 import { ScheduleView } from "@/components/schedule/ScheduleView";
 import { canWrite, getSession } from "@/lib/auth/guards";
+import { loadMainFlowSchedulingRules } from "@/lib/scheduling/context";
 import { dateKey } from "@/lib/scheduling/dates";
 
 export async function ScheduleMonthContent({
@@ -11,8 +12,12 @@ export async function ScheduleMonthContent({
   month: number;
 }) {
   const session = await getSession();
-  const data = await getMonthSchedule(year, month);
+  const [data, rules] = await Promise.all([
+    getMonthSchedule(year, month),
+    loadMainFlowSchedulingRules(),
+  ]);
   const writable = session ? canWrite(session.role) : false;
+  const isPublished = data.monthStatus === "PUBLISHED";
 
   const assignments = data.shiftRows.map((row) => ({
     doctorId: row.doctorId,
@@ -21,6 +26,7 @@ export async function ScheduleMonthContent({
     code: row.shiftType.code,
     color: row.shiftType.color,
     label: row.shiftType.label,
+    source: row.source as "MANUAL" | "AUTO",
   }));
 
   return (
@@ -31,6 +37,7 @@ export async function ScheduleMonthContent({
         id: d.id,
         name: d.name,
         targetHours: d.targetHours,
+        seniority: d.seniority,
       }))}
       shiftTypes={data.shiftTypes.map((t) => ({
         id: t.id,
@@ -45,6 +52,15 @@ export async function ScheduleMonthContent({
       coverageByDate={data.coverageByDate}
       hourSummary={data.hourSummary}
       readOnly={!writable}
+      publishedEditMode={writable && isPublished}
+      monthStatus={data.monthStatus}
+      publishedAt={data.publishedAt}
+      manualCount={data.manualCount}
+      autoCount={data.autoCount}
+      seniorRules={{
+        requireSeniorOnDayBand: rules.requireSeniorOnDayBand,
+        requireSeniorOnNightBand: rules.requireSeniorOnNightBand,
+      }}
     />
   );
 }

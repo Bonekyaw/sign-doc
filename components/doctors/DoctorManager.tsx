@@ -10,6 +10,8 @@ import {
   updateDoctor,
 } from "@/app/actions/doctors";
 import { dateKey, defaultTargetHours } from "@/lib/scheduling/dates";
+import type { SchedulingRulesConfig } from "@/lib/scheduling/rules-types";
+import { DEFAULT_SCHEDULING_RULES } from "@/lib/scheduling/rules-types";
 import { doctorSchema, type DoctorFormInput } from "@/lib/schemas/doctor";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -36,8 +38,13 @@ import type {
   Doctor,
   DoctorRestriction,
   DoctorRotation,
+  DoctorSeniority,
   RotationTemplate,
 } from "@/app/generated/prisma/client";
+import { useConfirmDialog } from "@/lib/hooks/use-confirm-dialog";
+import { AlertMessageDialog } from "@/components/ui/alert-message-dialog";
+import { cn } from "@/lib/utils";
+import { seniorityBadgeClass, seniorityLabel } from "@/lib/utils/seniority";
 
 type DoctorRow = Doctor & {
   restrictions: DoctorRestriction[];
@@ -55,23 +62,34 @@ type TemplateOption = { id: string; name: string };
 export function DoctorManager({
   doctors,
   rotationTemplates,
+  schedulingRules = DEFAULT_SCHEDULING_RULES,
   canWrite = true,
 }: {
   doctors: DoctorRow[];
   rotationTemplates: TemplateOption[];
+  schedulingRules?: SchedulingRulesConfig;
   canWrite?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DoctorRow | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [alertMessage, setAlertMessage] = useState<{
+    title: string;
+    description: string;
+    tone?: "error" | "success" | "info";
+  } | null>(null);
+  const { requestConfirm, confirmDialog, confirmLoading } = useConfirmDialog();
 
   const form = useForm<DoctorFormInput>({
     resolver: zodResolver(doctorSchema),
     defaultValues: {
       name: "",
       type: "FT",
-      monthlyHourLimit: 240,
+      seniority: "MID_LEVEL" as DoctorSeniority,
+      monthlyHourLimit: schedulingRules.ftDefaultTargetHours,
       girlsOff24h: false,
       rotationTemplateId: null,
       rotationStartDate: null,
@@ -85,7 +103,9 @@ export function DoctorManager({
     form.reset({
       name: d?.name ?? "",
       type,
-      monthlyHourLimit: d?.targetHours ?? defaultTargetHours(type),
+      seniority: (d?.seniority as DoctorSeniority) ?? "MID_LEVEL",
+      monthlyHourLimit:
+        d?.targetMonthlyHours ?? defaultTargetHours(type, schedulingRules),
       girlsOff24h:
         d?.restrictions.some((r) => r.type === "NO_TWENTY_FOUR") ?? false,
       rotationTemplateId: d?.rotation?.templateId ?? null,
@@ -97,10 +117,12 @@ export function DoctorManager({
 
   async function onSubmit(data: DoctorFormInput) {
     setSubmitError(null);
+    setSaving(true);
     try {
       const payload = {
         name: data.name,
         type: data.type,
+        seniority: data.seniority,
         monthlyHourLimit: data.monthlyHourLimit,
         girlsOff24h: data.girlsOff24h,
         rotationTemplateId: data.rotationTemplateId || null,
@@ -116,13 +138,43 @@ export function DoctorManager({
       router.refresh();
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Failed to save doctor.");
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this doctor and all their shifts?")) return;
-    await deleteDoctor(id);
-    router.refresh();
+  async function runDeleteDoctor(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteDoctor(id);
+      router.refresh();
+    } catch (e) {
+      setAlertMessage({
+        title: "Could not delete doctor",
+        description:
+          e instanceof Error ? e.message : "An unexpected error occurred.",
+        tone: "error",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function handleDelete(id: string, name: string) {
+    requestConfirm(
+      {
+        title: "Delete doctor?",
+        description: (
+          <>
+            Delete <strong>{name}</strong> and all of their shifts? This cannot
+            be undone.
+          </>
+        ),
+        confirmLabel: "Delete",
+        variant: "destructive",
+      },
+      () => runDeleteDoctor(id),
+    );
   }
 
   const watchType = form.watch("type");
@@ -133,7 +185,7 @@ export function DoctorManager({
       <PageHeader
         eyebrow="Roster"
         title="Doctors"
-        description="Manage roster, hour limits, and rotation templates."
+        description={`${doctors.length} doctor${doctors.length === 1 ? "" : "s"} on roster — manage hour limits and rotations.`}
         actions={
           canWrite ? (
           <Dialog
@@ -170,6 +222,24 @@ export function DoctorManager({
                 )}
               </div>
               <div>
+                <Label>Seniority</Label>
+                <Select
+                  value={form.watch("seniority")}
+                  onValueChange={(v) =>
+                    form.setValue("seniority", v as DoctorSeniority)
+                  }
+                >
+                  <SelectTrigger className="text-black">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SENIOR">Senior</SelectItem>
+                    <SelectItem value="MID_LEVEL">Mid-Level</SelectItem>
+                    <SelectItem value="JUNIOR">Junior</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label>Employment type</Label>
                 <Select
                   value={watchType}
@@ -177,7 +247,10 @@ export function DoctorManager({
                     const t = v as "FT" | "HALF_TIME" | "PT";
                     form.setValue("type", t);
                     if (!editing) {
-                      form.setValue("monthlyHourLimit", defaultTargetHours(t));
+                      form.setValue(
+                        "monthlyHourLimit",
+                        defaultTargetHours(t, schedulingRules),
+                      );
                     }
                   }}
                 >
@@ -194,7 +267,12 @@ export function DoctorManager({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="hours">Monthly hour limit</Label>
+                <Label htmlFor="hours">Monthly hour target</Label>
+                <p className="mb-1 text-xs text-slate-600">
+                  Hours this doctor must complete each month (240 FT, 120
+                  half-time, or custom for part-time). Save and publish require
+                  meeting this target.
+                </p>
                 <Input
                   id="hours"
                   type="number"
@@ -257,8 +335,12 @@ export function DoctorManager({
               {submitError && (
                 <p className="text-sm text-red-600">{submitError}</p>
               )}
-              <Button type="submit" className="w-full">
-                Save
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={saving || confirmLoading}
+              >
+                {saving ? "Loading…" : "Save"}
               </Button>
             </form>
             </DialogContent>
@@ -276,8 +358,16 @@ export function DoctorManager({
                 <div>
                   <p className="font-semibold text-slate-900">{d.name}</p>
                   <p className="text-sm text-slate-600">
-                    {d.type} · {d.targetHours}h / month
+                    {d.type} · {d.targetMonthlyHours}h / month
                   </p>
+                  <Badge
+                    className={cn(
+                      "mt-1",
+                      seniorityBadgeClass(d.seniority as DoctorSeniority),
+                    )}
+                  >
+                    {seniorityLabel(d.seniority as DoctorSeniority)}
+                  </Badge>
                 </div>
                 {canWrite ? (
                 <div className="flex gap-1">
@@ -295,9 +385,10 @@ export function DoctorManager({
                     variant="ghost"
                     size="sm"
                     className="text-red-600"
-                    onClick={() => handleDelete(d.id)}
+                    disabled={deletingId === d.id || confirmLoading}
+                    onClick={() => handleDelete(d.id, d.name)}
                   >
-                    Delete
+                    {deletingId === d.id ? "Loading…" : "Delete"}
                   </Button>
                 </div>
                 ) : null}
@@ -348,8 +439,15 @@ export function DoctorManager({
               <tr key={d.id} className="border-t border-sky-50">
                 <td className="p-3 font-medium text-slate-900">{d.name}</td>
                 <td className="p-3 text-slate-600">{d.type}</td>
-                <td className="p-3 text-slate-600">{d.targetHours}h</td>
+                <td className="p-3 text-slate-600">{d.targetMonthlyHours}h</td>
                 <td className="space-x-1 p-3">
+                  <Badge
+                    className={seniorityBadgeClass(
+                      d.seniority as DoctorSeniority,
+                    )}
+                  >
+                    {seniorityLabel(d.seniority as DoctorSeniority)}
+                  </Badge>
                   {d.restrictions.some((r) => r.type === "NO_TWENTY_FOUR") && (
                     <Badge className="bg-pink-100 text-pink-800">
                       Girls off 24h
@@ -378,9 +476,10 @@ export function DoctorManager({
                     variant="ghost"
                     size="sm"
                     className="text-red-600"
-                    onClick={() => handleDelete(d.id)}
+                    disabled={deletingId === d.id || confirmLoading}
+                    onClick={() => handleDelete(d.id, d.name)}
                   >
-                    Delete
+                    {deletingId === d.id ? "Loading…" : "Delete"}
                   </Button>
                   </>
                   ) : null}
@@ -398,6 +497,15 @@ export function DoctorManager({
         </table>
         </div>
       </div>
+
+      {confirmDialog}
+      <AlertMessageDialog
+        open={!!alertMessage}
+        onOpenChange={(open) => !open && setAlertMessage(null)}
+        title={alertMessage?.title ?? ""}
+        description={alertMessage?.description ?? ""}
+        tone={alertMessage?.tone}
+      />
     </div>
   );
 }

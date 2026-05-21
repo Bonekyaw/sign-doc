@@ -1,4 +1,6 @@
 import { dateKey } from "@/lib/scheduling/dates";
+import { shiftAssignmentsToShiftRecords } from "@/lib/scheduling/shift-validation-adapters";
+import { calculateMonthlyHours as sumShiftRecordHours } from "@/lib/scheduling/shift-validation-service";
 import type { ShiftAssignment } from "@/lib/scheduling/types";
 
 export function computeMonthlyHours(
@@ -7,12 +9,15 @@ export function computeMonthlyHours(
   shifts: ShiftAssignment[],
 ): number {
   const keySet = new Set(monthKeys);
-  return shifts
-    .filter(
+  const records = shiftAssignmentsToShiftRecords(
+    shifts.filter(
       (s) => s.doctorId === doctorId && keySet.has(dateKey(s.date)),
-    )
-    .reduce((sum, s) => sum + s.durationHours, 0);
+    ),
+  );
+  return sumShiftRecordHours(records);
 }
+
+export { calculateMonthlyHours } from "@/lib/scheduling/shift-validation-service";
 
 export function remainingMonthlyHours(
   doctorId: string,

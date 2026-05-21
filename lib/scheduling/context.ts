@@ -1,10 +1,18 @@
 import { prisma } from "@/lib/db";
+import { normalizeManpowerTargets } from "@/lib/scheduling/constants";
 import { dateKey, getMonthDateKeys, parseDateKey } from "@/lib/scheduling/dates";
 import {
   buildDoctorRotationMap,
   type DoctorRotationInfo,
   type RotationStepType,
 } from "@/lib/scheduling/rotation";
+import { rulesForMainFlow } from "@/lib/scheduling/main-flow-rules";
+import {
+  DEFAULT_SCHEDULING_RULES,
+  mapSchedulingRulesRow,
+  SCHEDULING_RULES_ID,
+  type SchedulingRulesConfig,
+} from "@/lib/scheduling/rules-types";
 import type {
   CoverageTarget,
   DoctorInfo,
@@ -12,6 +20,26 @@ import type {
   ShiftCode,
   ShiftTypeInfo,
 } from "@/lib/scheduling/types";
+
+export type { SchedulingRulesConfig };
+
+export async function loadSchedulingRules(): Promise<SchedulingRulesConfig> {
+  const row = await loadSchedulingRulesRow();
+  return mapSchedulingRulesRow(row);
+}
+
+/** Stored settings capped/enforced per `.cursor/rules/main-flow.mdc`. */
+export async function loadMainFlowSchedulingRules(): Promise<SchedulingRulesConfig> {
+  return rulesForMainFlow(await loadSchedulingRules());
+}
+
+export async function loadSchedulingRulesRow() {
+  return prisma.schedulingRules.upsert({
+    where: { id: SCHEDULING_RULES_ID },
+    create: { id: SCHEDULING_RULES_ID, ...DEFAULT_SCHEDULING_RULES },
+    update: {},
+  });
+}
 
 export async function loadShiftTypes(): Promise<ShiftTypeInfo[]> {
   const rows = await prisma.shiftTypeConfig.findMany({
@@ -35,7 +63,8 @@ export async function loadDoctors(): Promise<DoctorInfo[]> {
   return rows.map((d) => ({
     id: d.id,
     name: d.name,
-    targetHours: d.targetHours,
+    seniority: d.seniority,
+    targetHours: d.targetMonthlyHours,
     restrictions: d.restrictions.map((r) => r.type as "NO_TWENTY_FOUR"),
   }));
 }
@@ -100,7 +129,14 @@ export async function loadMonthShifts(
     date: s.date,
     shiftCode: s.shiftType.code as ShiftCode,
     durationHours: s.shiftType.durationHours,
+    source: s.source,
   }));
+}
+
+export function monthDateRange(year: number, month: number) {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0));
+  return { start, end };
 }
 
 export async function getMonthCoverageDefaults(
@@ -110,10 +146,10 @@ export async function getMonthCoverageDefaults(
   const settings = await prisma.monthSettings.findUnique({
     where: { year_month: { year, month } },
   });
-  return {
-    dayShiftTarget: settings?.dayShiftTarget ?? 4,
-    nightShiftTarget: settings?.nightShiftTarget ?? 3,
-  };
+  return normalizeManpowerTargets(
+    settings?.dayShiftTarget ?? 4,
+    settings?.nightShiftTarget ?? 3,
+  );
 }
 
 export async function getDailyCoverageOverrides(
@@ -128,10 +164,10 @@ export async function getDailyCoverageOverrides(
   });
   const map = new Map<string, CoverageTarget>();
   for (const row of rows) {
-    map.set(dateKey(row.date), {
-      dayShiftTarget: row.dayShiftTarget,
-      nightShiftTarget: row.nightShiftTarget,
-    });
+    map.set(
+      dateKey(row.date),
+      normalizeManpowerTargets(row.dayShiftTarget, row.nightShiftTarget),
+    );
   }
   return map;
 }

@@ -14,6 +14,7 @@ export function validateDayManpower(
   shifts: ShiftAssignment[],
   target: CoverageTarget,
   excludeDoctorId?: string,
+  options?: { allowOverCoverage?: boolean },
 ): DayManpowerResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -22,9 +23,15 @@ export function validateDayManpower(
   const nCount = countBandForDate(date, "N", shifts, excludeDoctorId);
 
   if (lCount > target.dayShiftTarget) {
-    errors.push(
-      `Day shift has ${lCount} doctors assigned; maximum is ${target.dayShiftTarget}.`,
-    );
+    if (options?.allowOverCoverage) {
+      warnings.push(
+        `Day shift has ${lCount} doctors assigned (target ${target.dayShiftTarget}).`,
+      );
+    } else {
+      errors.push(
+        `Day shift has ${lCount} doctors assigned; maximum is ${target.dayShiftTarget}.`,
+      );
+    }
   } else if (lCount < target.dayShiftTarget) {
     warnings.push(
       `Day shift has ${lCount}/${target.dayShiftTarget} doctors assigned.`,
@@ -32,9 +39,15 @@ export function validateDayManpower(
   }
 
   if (nCount > target.nightShiftTarget) {
-    errors.push(
-      `Night shift has ${nCount} doctors assigned; maximum is ${target.nightShiftTarget}.`,
-    );
+    if (options?.allowOverCoverage) {
+      warnings.push(
+        `Night shift has ${nCount} doctors assigned (target ${target.nightShiftTarget}).`,
+      );
+    } else {
+      errors.push(
+        `Night shift has ${nCount} doctors assigned; maximum is ${target.nightShiftTarget}.`,
+      );
+    }
   } else if (nCount < target.nightShiftTarget) {
     warnings.push(
       `Night shift has ${nCount}/${target.nightShiftTarget} doctors assigned.`,

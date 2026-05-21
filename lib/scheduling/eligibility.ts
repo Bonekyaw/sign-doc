@@ -1,5 +1,10 @@
 import { dateKey } from "@/lib/scheduling/dates";
-import { validateAssignment } from "@/lib/scheduling/validate-assignment";
+import type { SchedulingRulesConfig } from "@/lib/scheduling/rules-types";
+import { DEFAULT_SCHEDULING_RULES } from "@/lib/scheduling/rules-types";
+import {
+  validateAssignment,
+  type AssignmentPurpose,
+} from "@/lib/scheduling/validate-assignment";
 import type {
   CoverageTarget,
   DoctorInfo,
@@ -39,6 +44,8 @@ export function getEligibleDoctors(params: {
   monthKeys: string[];
   coverageTarget: CoverageTarget;
   leaveByDoctor: Map<string, Set<string>>;
+  rules?: SchedulingRulesConfig;
+  purpose?: AssignmentPurpose;
 }): { doctor: DoctorInfo; validation: ValidationResult }[] {
   const {
     doctors,
@@ -49,6 +56,8 @@ export function getEligibleDoctors(params: {
     monthKeys,
     coverageTarget,
     leaveByDoctor,
+    rules = DEFAULT_SCHEDULING_RULES,
+    purpose = "coverage",
   } = params;
 
   const eligible: { doctor: DoctorInfo; validation: ValidationResult }[] = [];
@@ -65,6 +74,9 @@ export function getEligibleDoctors(params: {
       existingShifts: workingShifts,
       monthKeys,
       coverageTarget,
+      doctors,
+      rules,
+      purpose,
     });
 
     if (validation.ok) {

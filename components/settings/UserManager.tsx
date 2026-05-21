@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { createUser, setUserPassword, updateUser } from "@/app/actions/users";
 import type { UserRole } from "@/app/generated/prisma/client";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -26,6 +28,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  createUserSchema,
+  setUserPasswordSchema,
+  type CreateUserInput,
+} from "@/lib/schemas/user";
 
 type UserRow = {
   id: string;
@@ -51,48 +58,78 @@ const ROLE_LABELS: Record<UserRole, string> = {
 export function UserManager({
   users,
   doctors,
+  canManageAllRoles,
 }: {
   users: UserRow[];
   doctors: DoctorOption[];
+  canManageAllRoles: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [role, setRole] = useState<UserRole>("ADMIN");
-  const [doctorId, setDoctorId] = useState("");
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
-  const [newPassword, setNewPassword] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
+  const form = useForm<CreateUserInput>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: {
+      username: "",
+      password: "",
+      role: canManageAllRoles ? "ADMIN" : "DOCTOR",
+      doctorId: "",
+    },
+  });
+
+  const role = form.watch("role");
+  const doctorId = form.watch("doctorId");
   const availableDoctors = doctors.filter((d) => !d.user);
 
-  async function handleCreate(formData: FormData) {
-    setError(null);
-    const result = await createUser({
-      username: String(formData.get("username")),
-      password: String(formData.get("password")),
-      role,
-      doctorId:
-        role === "DOCTOR" ? String(formData.get("doctorId") || "") : null,
+  function resetCreateForm() {
+    form.reset({
+      username: "",
+      password: "",
+      role: canManageAllRoles ? "ADMIN" : "DOCTOR",
+      doctorId: "",
     });
+    setError(null);
+  }
+
+  async function onCreateSubmit(values: CreateUserInput) {
+    setError(null);
+    setCreating(true);
+    const result = await createUser({
+      username: values.username,
+      password: values.password,
+      role: values.role,
+      doctorId: values.role === "DOCTOR" ? values.doctorId ?? null : null,
+    });
+    setCreating(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
     setOpen(false);
-    setRole("ADMIN");
-    setDoctorId("");
+    resetCreateForm();
     router.refresh();
   }
 
-  async function handleSetPassword(userId: string) {
+  async function handleSetPassword(userId: string, newPassword: string) {
     setError(null);
-    const result = await setUserPassword(userId, newPassword);
+    const parsed = setUserPasswordSchema.safeParse({ newPassword });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? "Invalid password.");
+      return;
+    }
+    setPasswordSaving(true);
+    const result = await setUserPassword(userId, parsed.data.newPassword);
+    setPasswordSaving(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
     setPasswordUserId(null);
-    setNewPassword("");
     router.refresh();
   }
 
@@ -101,70 +138,93 @@ export function UserManager({
       <PageHeader
         eyebrow="Settings"
         title="Users"
-        description="Manage login accounts, roles, and passwords."
+        description={
+          canManageAllRoles
+            ? "Manage login accounts, roles, and passwords."
+            : "Create and manage doctor login accounts."
+        }
         actions={
           <Dialog
             open={open}
             onOpenChange={(next) => {
               setOpen(next);
-              if (!next) {
-                setRole("ADMIN");
-                setDoctorId("");
-                setError(null);
-              }
+              if (!next) resetCreateForm();
             }}
           >
             <DialogTrigger asChild>
-              <Button>Add user</Button>
+              <Button>{canManageAllRoles ? "Add user" : "Add doctor account"}</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>New user</DialogTitle>
+                <DialogTitle>
+                  {canManageAllRoles ? "New user" : "New doctor account"}
+                </DialogTitle>
                 <DialogDescription>
-                  Create a login with username, password, and role.
+                  Create a login with username and password
+                  {canManageAllRoles ? ", role, and optional doctor link." : " linked to a roster doctor."}
                 </DialogDescription>
               </DialogHeader>
-              <form action={handleCreate} className="space-y-4">
+              <form
+                onSubmit={form.handleSubmit(onCreateSubmit)}
+                className="space-y-4"
+              >
                 <div className="space-y-2">
                   <Label htmlFor="username">Username</Label>
-                  <Input id="username" name="username" required />
+                  <Input id="username" {...form.register("username")} />
+                  {form.formState.errors.username ? (
+                    <p className="text-sm text-red-600">
+                      {form.formState.errors.username.message}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <PasswordInput
                     id="password"
-                    name="password"
-                    required
-                    minLength={8}
                     autoComplete="new-password"
+                    {...form.register("password")}
                   />
+                  {form.formState.errors.password ? (
+                    <p className="text-sm text-red-600">
+                      {form.formState.errors.password.message}
+                    </p>
+                  ) : null}
                 </div>
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <Select
-                    value={role}
-                    onValueChange={(v) => setRole(v as UserRole)}
-                  >
-                    <SelectTrigger className="text-black">
-                      <SelectValue placeholder="Select role">
-                        {ROLE_LABELS[role]}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
-                      <SelectItem value="OWNER">Owner</SelectItem>
-                      <SelectItem value="DOCTOR">Doctor</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {canManageAllRoles ? (
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select
+                      value={role}
+                      onValueChange={(v) => {
+                        form.setValue("role", v as UserRole, {
+                          shouldValidate: true,
+                        });
+                        if (v !== "DOCTOR") {
+                          form.setValue("doctorId", "");
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="text-black">
+                        <SelectValue placeholder="Select role">
+                          {ROLE_LABELS[role]}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
+                        <SelectItem value="OWNER">Owner</SelectItem>
+                        <SelectItem value="DOCTOR">Doctor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
                 {role === "DOCTOR" ? (
                   <div className="space-y-2">
                     <Label>Linked doctor</Label>
                     <Select
-                      name="doctorId"
-                      value={doctorId}
-                      onValueChange={setDoctorId}
-                      required
+                      value={doctorId ?? ""}
+                      onValueChange={(v) =>
+                        form.setValue("doctorId", v, { shouldValidate: true })
+                      }
                     >
                       <SelectTrigger className="text-black">
                         <SelectValue placeholder="Select doctor">
@@ -179,25 +239,35 @@ export function UserManager({
                         ))}
                       </SelectContent>
                     </Select>
+                    {form.formState.errors.doctorId ? (
+                      <p className="text-sm text-red-600">
+                        {form.formState.errors.doctorId.message}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
                 {error ? (
                   <p className="text-sm text-red-600">{error}</p>
                 ) : null}
-                <Button type="submit">Create</Button>
+                <Button type="submit" disabled={creating}>
+                  {creating ? "Loading…" : "Create"}
+                </Button>
               </form>
             </DialogContent>
           </Dialog>
         }
       />
 
-      {error && !open ? (
+      {error && !open && !passwordUserId ? (
         <p className="text-sm text-red-600">{error}</p>
       ) : null}
 
       <Card>
         <CardContent className="p-0">
           <div className="divide-y divide-neutral-100">
+            {users.length === 0 ? (
+              <p className="p-4 text-sm text-slate-500">No user accounts yet.</p>
+            ) : null}
             {users.map((user) => (
               <div
                 key={user.id}
@@ -225,7 +295,7 @@ export function UserManager({
                     size="sm"
                     onClick={() => {
                       setPasswordUserId(user.id);
-                      setNewPassword("");
+                      setError(null);
                     }}
                   >
                     Set password
@@ -233,16 +303,30 @@ export function UserManager({
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={togglingUserId === user.id}
                     onClick={async () => {
-                      await updateUser(user.id, {
-                        role: user.role,
-                        doctorId: user.doctorId,
-                        isActive: !user.isActive,
-                      });
-                      router.refresh();
+                      setTogglingUserId(user.id);
+                      try {
+                        const result = await updateUser(user.id, {
+                          role: user.role,
+                          doctorId: user.doctorId,
+                          isActive: !user.isActive,
+                        });
+                        if (!result.ok) {
+                          setError(result.error);
+                        } else {
+                          router.refresh();
+                        }
+                      } finally {
+                        setTogglingUserId(null);
+                      }
                     }}
                   >
-                    {user.isActive ? "Deactivate" : "Activate"}
+                    {togglingUserId === user.id
+                      ? "Loading…"
+                      : user.isActive
+                        ? "Deactivate"
+                        : "Activate"}
                   </Button>
                 </div>
               </div>
@@ -251,39 +335,69 @@ export function UserManager({
         </CardContent>
       </Card>
 
-      <Dialog
+      <PasswordDialog
         open={!!passwordUserId}
         onOpenChange={(o) => !o && setPasswordUserId(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Set password</DialogTitle>
-            <DialogDescription>
-              Enter a new password for this account. Existing sessions will be signed out.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="newPassword">New password</Label>
-              <PasswordInput
-                id="newPassword"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </div>
-            <Button
-              onClick={() =>
-                passwordUserId && handleSetPassword(passwordUserId)
-              }
-              disabled={newPassword.length < 8}
-            >
-              Save password
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        saving={passwordSaving}
+        error={error}
+        onSave={(password) =>
+          passwordUserId ? handleSetPassword(passwordUserId, password) : undefined
+        }
+      />
     </div>
+  );
+}
+
+function PasswordDialog({
+  open,
+  onOpenChange,
+  saving,
+  error,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  saving: boolean;
+  error: string | null;
+  onSave: (password: string) => void;
+}) {
+  const form = useForm<{ newPassword: string }>({
+    resolver: zodResolver(setUserPasswordSchema),
+    defaultValues: { newPassword: "" },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Set password</DialogTitle>
+          <DialogDescription>
+            Enter a new password for this account. Existing sessions will be signed out.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={form.handleSubmit((values) => onSave(values.newPassword))}
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="newPassword">New password</Label>
+            <PasswordInput
+              id="newPassword"
+              autoComplete="new-password"
+              {...form.register("newPassword")}
+            />
+            {form.formState.errors.newPassword ? (
+              <p className="text-sm text-red-600">
+                {form.formState.errors.newPassword.message}
+              </p>
+            ) : null}
+          </div>
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <Button type="submit" disabled={saving}>
+            {saving ? "Loading…" : "Save password"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

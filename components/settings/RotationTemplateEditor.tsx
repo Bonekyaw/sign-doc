@@ -14,6 +14,8 @@ import {
   type RotationTemplateInput,
 } from "@/lib/schemas/rotation";
 import type { RotationStepType } from "@/lib/scheduling/rotation";
+import { useConfirmDialog } from "@/lib/hooks/use-confirm-dialog";
+import { AlertMessageDialog } from "@/components/ui/alert-message-dialog";
 import { displayShiftCode } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,14 @@ export function RotationTemplateEditor({
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<TemplateRow | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [alertMessage, setAlertMessage] = useState<{
+    title: string;
+    description: string;
+    tone?: "error" | "success" | "info";
+  } | null>(null);
+  const { requestConfirm, confirmDialog, confirmLoading } = useConfirmDialog();
 
   const form = useForm<RotationTemplateInput>({
     resolver: zodResolver(rotationTemplateSchema),
@@ -84,13 +94,52 @@ export function RotationTemplateEditor({
   }
 
   async function onSubmit(data: RotationTemplateInput) {
-    if (editing) {
-      await updateRotationTemplate(editing.id, data);
-    } else {
-      await createRotationTemplate(data);
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateRotationTemplate(editing.id, data);
+      } else {
+        await createRotationTemplate(data);
+      }
+      loadTemplate(null);
+      router.refresh();
+    } finally {
+      setSaving(false);
     }
-    loadTemplate(null);
-    router.refresh();
+  }
+
+  async function runDeleteTemplate(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteRotationTemplate(id);
+      router.refresh();
+    } catch (e) {
+      setAlertMessage({
+        title: "Could not delete template",
+        description:
+          e instanceof Error ? e.message : "An unexpected error occurred.",
+        tone: "error",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function handleDeleteTemplate(id: string, name: string) {
+    requestConfirm(
+      {
+        title: "Delete template?",
+        description: (
+          <>
+            Delete rotation template <strong>{name}</strong>? This cannot be
+            undone.
+          </>
+        ),
+        confirmLabel: "Delete",
+        variant: "destructive",
+      },
+      () => runDeleteTemplate(id),
+    );
   }
 
   return (
@@ -177,7 +226,9 @@ export function RotationTemplateEditor({
             </div>
             {canWrite ? (
             <div className="flex flex-wrap gap-2">
-              <Button type="submit">{editing ? "Update" : "Create"}</Button>
+              <Button type="submit" disabled={saving || confirmLoading}>
+                {saving ? "Loading…" : editing ? "Update" : "Create"}
+              </Button>
               {editing && (
                 <Button type="button" variant="outline" onClick={() => loadTemplate(null)}>
                   Cancel
@@ -221,17 +272,10 @@ export function RotationTemplateEditor({
                   size="sm"
                   variant="ghost"
                   className="text-red-600"
-                  onClick={async () => {
-                    if (!confirm("Delete this template?")) return;
-                    try {
-                      await deleteRotationTemplate(t.id);
-                      router.refresh();
-                    } catch (e) {
-                      alert(e instanceof Error ? e.message : "Cannot delete.");
-                    }
-                  }}
+                  disabled={deletingId === t.id || confirmLoading}
+                  onClick={() => handleDeleteTemplate(t.id, t.name)}
                 >
-                  Delete
+                  {deletingId === t.id ? "Loading…" : "Delete"}
                 </Button>
               </div>
               ) : null}
@@ -242,6 +286,15 @@ export function RotationTemplateEditor({
           )}
         </CardContent>
       </Card>
+
+      {confirmDialog}
+      <AlertMessageDialog
+        open={!!alertMessage}
+        onOpenChange={(open) => !open && setAlertMessage(null)}
+        title={alertMessage?.title ?? ""}
+        description={alertMessage?.description ?? ""}
+        tone={alertMessage?.tone}
+      />
     </div>
   );
 }

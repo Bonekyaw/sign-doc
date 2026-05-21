@@ -66,7 +66,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/settings/users")) {
-    if (session.role !== "OWNER") {
+    if (session.role !== "ADMIN" && session.role !== "OWNER") {
       return NextResponse.redirect(new URL("/", request.url));
     }
   }

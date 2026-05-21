@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+Manpower ratios (Long day / Night doctors per day) must be one of: **L3 - N3**, **L3 - N2**, or **L4 - N3** (e.g. L3 = at least 3 Long day doctors). A day is correctly staffed when L and N counts meet the configured ratio.
+
+Manpower should include at least one Senior Doctor on Day Duty or Night Duty. There should not be only Junior Doctors. So when recording Doctor information, it should be noted whether it is Senior, Junior or Mid-Level. A doctor who has taken 24 hour duty must take 1 or 2 days off. After taking Long Day Duty, he can take 24 hour duty continuously. However, after taking Night Duty, he is not allowed to take 24 hour duty continuously. Long Day Duty cannot be done for 3 consecutive days. Night Day Duty cannot be done for 3 consecutive days. Off day cannot be done for 4 consecutive days. Each doctor must complete their monthly hour target: full-time 240h, half-time 120h, part-time their configured target (`target_hours`). Save and publish require every doctor to meet their target.

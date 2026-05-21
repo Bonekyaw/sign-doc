@@ -4,7 +4,7 @@ import { AuthError } from "@/lib/auth/errors";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/constants";
 import { verifySessionToken } from "@/lib/auth/session";
 import type { SessionUser } from "@/lib/auth/types";
-import { prisma } from "@/lib/db";
+import { prisma, withDbRetry } from "@/lib/db";
 
 async function resolveSession(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
@@ -14,17 +14,19 @@ async function resolveSession(): Promise<SessionUser | null> {
   const payload = await verifySessionToken(token);
   if (!payload) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.sub },
-    select: {
-      id: true,
-      username: true,
-      role: true,
-      doctorId: true,
-      tokenVersion: true,
-      isActive: true,
-    },
-  });
+  const user = await withDbRetry(() =>
+    prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        doctorId: true,
+        tokenVersion: true,
+        isActive: true,
+      },
+    }),
+  );
 
   if (!user || !user.isActive) return null;
   if (user.tokenVersion !== payload.tokenVersion) return null;
@@ -67,6 +69,10 @@ export async function requireWrite(): Promise<SessionUser> {
 
 export async function requireOwner(): Promise<SessionUser> {
   return requireRole(["OWNER"]);
+}
+
+export async function requireUserAdmin(): Promise<SessionUser> {
+  return requireRole(["ADMIN", "OWNER"]);
 }
 
 export async function requireAdminRead(): Promise<SessionUser> {

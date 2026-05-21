@@ -3,9 +3,10 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { doctorsTag } from "@/lib/data/cache-tags";
 import { prisma } from "@/lib/db";
+import { loadSchedulingRules } from "@/lib/scheduling/context";
 import { defaultTargetHours, parseDateKey } from "@/lib/scheduling/dates";
 import { doctorSchema } from "@/lib/schemas/doctor";
-import type { DoctorType } from "@/app/generated/prisma/client";
+import type { DoctorSeniority, DoctorType } from "@/app/generated/prisma/client";
 import { requireAdminRead, requireWrite } from "@/lib/auth/guards";
 
 export async function listDoctors() {
@@ -42,6 +43,7 @@ async function upsertDoctorRotation(
 export async function createDoctor(input: {
   name: string;
   type: DoctorType;
+  seniority: DoctorSeniority;
   monthlyHourLimit?: number;
   targetHours?: number;
   girlsOff24h?: boolean;
@@ -50,15 +52,17 @@ export async function createDoctor(input: {
   rotationStartDate?: string | null;
 }) {
   await requireWrite();
+  const rules = await loadSchedulingRules();
   const girlsOff = input.girlsOff24h ?? input.noTwentyFour ?? false;
   const limit =
     input.monthlyHourLimit ??
     input.targetHours ??
-    defaultTargetHours(input.type as "FT" | "HALF_TIME" | "PT");
+    defaultTargetHours(input.type as "FT" | "HALF_TIME" | "PT", rules);
 
   const parsed = doctorSchema.safeParse({
     name: input.name,
     type: input.type,
+    seniority: input.seniority,
     monthlyHourLimit: limit,
     girlsOff24h: girlsOff,
     rotationTemplateId: input.rotationTemplateId ?? null,
@@ -72,7 +76,8 @@ export async function createDoctor(input: {
     data: {
       name: parsed.data.name,
       type: parsed.data.type,
-      targetHours: parsed.data.monthlyHourLimit,
+      seniority: parsed.data.seniority,
+      targetMonthlyHours: parsed.data.monthlyHourLimit,
       restrictions: parsed.data.girlsOff24h
         ? { create: [{ type: "NO_TWENTY_FOUR" }] }
         : undefined,
@@ -97,6 +102,7 @@ export async function updateDoctor(
   input: {
     name: string;
     type: DoctorType;
+    seniority: DoctorSeniority;
     monthlyHourLimit?: number;
     targetHours?: number;
     girlsOff24h?: boolean;
@@ -106,12 +112,17 @@ export async function updateDoctor(
   },
 ) {
   await requireWrite();
+  const rules = await loadSchedulingRules();
   const girlsOff = input.girlsOff24h ?? input.noTwentyFour ?? false;
-  const limit = input.monthlyHourLimit ?? input.targetHours ?? 240;
+  const limit =
+    input.monthlyHourLimit ??
+    input.targetHours ??
+    defaultTargetHours(input.type as "FT" | "HALF_TIME" | "PT", rules);
 
   const parsed = doctorSchema.safeParse({
     name: input.name,
     type: input.type,
+    seniority: input.seniority,
     monthlyHourLimit: limit,
     girlsOff24h: girlsOff,
     rotationTemplateId: input.rotationTemplateId ?? null,
@@ -127,7 +138,8 @@ export async function updateDoctor(
       data: {
         name: parsed.data.name,
         type: parsed.data.type,
-        targetHours: parsed.data.monthlyHourLimit,
+        seniority: parsed.data.seniority,
+        targetMonthlyHours: parsed.data.monthlyHourLimit,
       },
     });
     await tx.doctorRestriction.deleteMany({ where: { doctorId: id } });

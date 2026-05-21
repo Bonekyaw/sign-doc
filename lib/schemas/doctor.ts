@@ -4,6 +4,7 @@ export const doctorSchema = z
   .object({
     name: z.string().min(1, "Name is required").max(120),
     type: z.enum(["FT", "HALF_TIME", "PT"]),
+    seniority: z.enum(["SENIOR", "MID_LEVEL", "JUNIOR"]),
     monthlyHourLimit: z.number().int().min(1).max(300),
     girlsOff24h: z.boolean(),
     rotationTemplateId: z.string().optional().nullable(),

@@ -26,6 +26,7 @@ export function validateCoverage(
   shifts: ShiftAssignment[],
   target: CoverageTarget,
   excludeDoctorId?: string,
+  options?: { allowOverCoverage?: boolean },
 ): { error: string | null; warning: string | null } {
   if (shiftCode !== "L" && shiftCode !== "N") {
     return { error: null, warning: null };
@@ -38,6 +39,12 @@ export function validateCoverage(
   const label = shiftCode === "L" ? "day" : "night";
 
   if (count > targetCount) {
+    if (options?.allowOverCoverage) {
+      return {
+        error: null,
+        warning: `Over target ${label} coverage (${count}/${targetCount}).`,
+      };
+    }
     return {
       error: `This date already has the maximum ${label} shift coverage (${targetCount}).`,
       warning: null,

@@ -1,22 +1,29 @@
 import { z } from "zod";
 import {
-  ALLOWED_DAY_TARGETS,
-  ALLOWED_NIGHT_TARGETS,
+  isValidManpowerRatio,
+  MANPOWER_PRESETS,
 } from "@/lib/scheduling/constants";
 
-const dayTargetSchema = z.union([
-  z.literal(ALLOWED_DAY_TARGETS[0]),
-  z.literal(ALLOWED_DAY_TARGETS[1]),
+const manpowerPresetIdSchema = z.enum([
+  MANPOWER_PRESETS[0].id,
+  MANPOWER_PRESETS[1].id,
+  MANPOWER_PRESETS[2].id,
 ]);
 
-const nightTargetSchema = z.union([
-  z.literal(ALLOWED_NIGHT_TARGETS[0]),
-  z.literal(ALLOWED_NIGHT_TARGETS[1]),
-]);
+export const coverageTargetSchema = z
+  .object({
+    dayShiftTarget: z.number().int(),
+    nightShiftTarget: z.number().int(),
+  })
+  .refine(
+    (v) => isValidManpowerRatio(v.dayShiftTarget, v.nightShiftTarget),
+    {
+      message: `Manpower must be one of: ${MANPOWER_PRESETS.map((p) => p.label).join(", ")}.`,
+    },
+  );
 
-export const coverageTargetSchema = z.object({
-  dayShiftTarget: dayTargetSchema,
-  nightShiftTarget: nightTargetSchema,
+export const manpowerPresetSchema = z.object({
+  presetId: manpowerPresetIdSchema,
 });
 
 export const monthCoverageSchema = coverageTargetSchema.extend({
@@ -29,3 +36,4 @@ export const dailyCoverageSchema = coverageTargetSchema.extend({
 });
 
 export type CoverageTargetInput = z.infer<typeof coverageTargetSchema>;
+export type ManpowerPresetInput = z.infer<typeof manpowerPresetSchema>;

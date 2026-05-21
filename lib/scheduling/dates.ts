@@ -29,8 +29,19 @@ export function getMonthDateKeys(year: number, month: number): string[] {
   return keys;
 }
 
-export function defaultTargetHours(type: "FT" | "HALF_TIME" | "PT"): number {
-  if (type === "FT") return 240;
-  if (type === "HALF_TIME") return 120;
-  return 120;
+import type { SchedulingRulesConfig } from "@/lib/scheduling/rules-types";
+import { DEFAULT_SCHEDULING_RULES } from "@/lib/scheduling/rules-types";
+
+export function defaultTargetHours(
+  type: "FT" | "HALF_TIME" | "PT",
+  rules: Pick<
+    SchedulingRulesConfig,
+    | "ftDefaultTargetHours"
+    | "halfTimeDefaultTargetHours"
+    | "ptDefaultTargetHours"
+  > = DEFAULT_SCHEDULING_RULES,
+): number {
+  if (type === "FT") return rules.ftDefaultTargetHours;
+  if (type === "HALF_TIME") return rules.halfTimeDefaultTargetHours;
+  return rules.ptDefaultTargetHours;
 }

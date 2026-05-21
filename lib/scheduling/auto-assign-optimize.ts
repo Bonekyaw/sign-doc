@@ -1,10 +1,14 @@
 import { dateKey, parseDateKey } from "@/lib/scheduling/dates";
 import { getEligibleDoctors } from "@/lib/scheduling/eligibility";
+import { countBandForDate } from "@/lib/scheduling/validate-coverage";
+import { bandHasSenior } from "@/lib/scheduling/validate-senior-manpower";
 import {
   matchesRotationForShift,
   type DoctorRotationInfo,
 } from "@/lib/scheduling/rotation";
 import type { AutoAssignProposal } from "@/lib/scheduling/auto-assign";
+import type { SchedulingRulesConfig } from "@/lib/scheduling/rules-types";
+import { DEFAULT_SCHEDULING_RULES } from "@/lib/scheduling/rules-types";
 import type {
   CoverageTarget,
   DoctorInfo,
@@ -24,6 +28,7 @@ type OptimizeParams = {
   getCoverageForDateKey: (dateKeyStr: string) => CoverageTarget;
   doctorRotations: Map<string, DoctorRotationInfo>;
   leaveByDoctor: Map<string, Set<string>>;
+  rules?: SchedulingRulesConfig;
 };
 
 function buildWorkingShifts(
@@ -70,6 +75,7 @@ function validates(
       monthKeys: params.monthKeys,
       coverageTarget: coverage,
       leaveByDoctor: params.leaveByDoctor,
+      rules: params.rules ?? DEFAULT_SCHEDULING_RULES,
     }).length === 1
   );
 }
@@ -143,6 +149,42 @@ export function optimizeAssignments(params: OptimizeParams): {
         ) {
           continue;
         }
+
+        const doctorsById = new Map(
+          params.doctors.map((d) => [d.id, d]),
+        );
+        const trial = buildWorkingShifts(params.baseShifts, proposals);
+        const removeBoth = trial.filter(
+          (s) =>
+            !(
+              (s.doctorId === a.doctorId && dateKey(s.date) === a.date) ||
+              (s.doctorId === b.doctorId && dateKey(s.date) === b.date)
+            ),
+        );
+        const afterSwap: ShiftAssignment[] = [
+          ...removeBoth,
+          {
+            doctorId: a.doctorId,
+            date,
+            shiftCode: b.shiftCode,
+            durationHours: aNewHours,
+          },
+          {
+            doctorId: b.doctorId,
+            date,
+            shiftCode: a.shiftCode,
+            durationHours: bNewHours,
+          },
+        ];
+        let seniorBandsOk = true;
+        for (const band of ["L", "N"] as const) {
+          if (countBandForDate(date, band, afterSwap) === 0) continue;
+          if (!bandHasSenior(date, band, afterSwap, doctorsById)) {
+            seniorBandsOk = false;
+            break;
+          }
+        }
+        if (!seniorBandsOk) continue;
 
         proposals[i] = {
           ...a,
