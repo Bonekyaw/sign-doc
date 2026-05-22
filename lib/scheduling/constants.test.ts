@@ -3,42 +3,71 @@ import { describe, it } from "node:test";
 import {
   formatManpowerRatio,
   isValidManpowerRatio,
+  mergeManpowerPresets,
   normalizeManpowerTargets,
+  parseRatioPresetId,
   presetIdToTargets,
+  ratioPresetId,
   targetsToPresetId,
   validateCoverageTargetValues,
 } from "@/lib/scheduling/constants";
 
 describe("manpower presets", () => {
-  it("accepts L3-N3, L3-N2, and L4-N3", () => {
+  it("accepts any L/N counts within configured ranges", () => {
     assert.equal(isValidManpowerRatio(3, 3), true);
     assert.equal(isValidManpowerRatio(3, 2), true);
     assert.equal(isValidManpowerRatio(4, 3), true);
+    assert.equal(isValidManpowerRatio(4, 2), true);
+    assert.equal(isValidManpowerRatio(5, 1), true);
   });
 
-  it("rejects invalid pairs such as L4-N2", () => {
-    assert.equal(isValidManpowerRatio(4, 2), false);
-    const err = validateCoverageTargetValues(4, 2);
+  it("rejects out-of-range counts", () => {
+    assert.equal(isValidManpowerRatio(0, 2), false);
+    assert.equal(isValidManpowerRatio(4, 11), false);
+    const err = validateCoverageTargetValues(0, 2);
     assert.ok(err);
-    assert.match(err, /L3 - N3/);
   });
 
   it("formats ratios as L# - N#", () => {
     assert.equal(formatManpowerRatio(3, 2), "L3 - N2");
   });
 
-  it("maps preset ids to targets and back", () => {
+  it("maps ratio ids to targets and back", () => {
     assert.equal(targetsToPresetId(3, 3), "L3-N3");
     assert.deepEqual(presetIdToTargets("L4-N3"), {
       dayShiftTarget: 4,
       nightShiftTarget: 3,
     });
+    assert.deepEqual(parseRatioPresetId("L5-N2"), {
+      dayShiftTarget: 5,
+      nightShiftTarget: 2,
+    });
+    assert.equal(ratioPresetId(4, 2), "L4-N2");
   });
 
-  it("normalizes invalid stored values to L4-N3", () => {
-    assert.deepEqual(normalizeManpowerTargets(4, 2), {
-      dayShiftTarget: 4,
-      nightShiftTarget: 3,
+  it("clamps stored values into allowed ranges", () => {
+    assert.deepEqual(normalizeManpowerTargets(99, -1), {
+      dayShiftTarget: 10,
+      nightShiftTarget: 1,
     });
+  });
+
+  it("merges built-in and custom presets without duplicates", () => {
+    const merged = mergeManpowerPresets([
+      {
+        id: "L4-N2",
+        dayShiftTarget: 4,
+        nightShiftTarget: 2,
+        label: "L4 - N2",
+      },
+      {
+        id: "L3-N3",
+        dayShiftTarget: 3,
+        nightShiftTarget: 3,
+        label: "Duplicate built-in",
+      },
+    ]);
+    assert.equal(merged.length, 4);
+    assert.ok(merged.some((p) => p.id === "L4-N2"));
   });
 });

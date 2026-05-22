@@ -6,7 +6,10 @@ import {
 } from "@/lib/scheduling/shift-validation-service";
 import type { SchedulingRulesConfig } from "@/lib/scheduling/rules-types";
 import { DEFAULT_SCHEDULING_RULES } from "@/lib/scheduling/rules-types";
-import { countBandForDate } from "@/lib/scheduling/validate-coverage";
+import {
+  countBandForDate,
+  shiftCountsTowardBand,
+} from "@/lib/scheduling/validate-coverage";
 import type {
   DoctorInfo,
   DoctorSeniority,
@@ -31,7 +34,10 @@ export function bandHasSenior(
   const key = dateKey(date);
   const doctorIds = new Set(
     shifts
-      .filter((s) => dateKey(s.date) === key && s.shiftCode === band)
+      .filter(
+        (s) =>
+          dateKey(s.date) === key && shiftCountsTowardBand(s.shiftCode, band),
+      )
       .map((s) => s.doctorId),
   );
   for (const id of doctorIds) {
@@ -53,7 +59,8 @@ export function validateSeniorManpowerForBand(
 
   const key = dateKey(date);
   const onBand = shifts.filter(
-    (s) => dateKey(s.date) === key && s.shiftCode === band,
+    (s) =>
+      dateKey(s.date) === key && shiftCountsTowardBand(s.shiftCode, band),
   );
   const assignedDoctors: DoctorRecord[] = onBand.map((s) => {
     const d = doctorsById.get(s.doctorId);

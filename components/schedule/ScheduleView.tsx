@@ -35,6 +35,10 @@ import {
   type DraftShiftRow,
 } from "@/lib/scheduling/draft-helpers";
 import { computeScheduleMetrics } from "@/lib/scheduling/schedule-metrics";
+import {
+  adminAssignableShiftTypes,
+  isOffDayAssignment,
+} from "@/lib/scheduling/admin-assignable-shifts";
 import type { DoctorSeniority, ShiftCode } from "@/lib/scheduling/types";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CoverageStrip } from "@/components/schedule/CoverageStrip";
@@ -148,6 +152,9 @@ function editableCellTitle(
   assignment: ShiftRow | undefined,
   isSeniorDoctor: boolean,
 ): string | undefined {
+  if (isOffDayAssignment(assignment)) {
+    return "Off day — click to edit";
+  }
   if (assignment && isSeniorDoctor) {
     return "Senior doctor on duty — click to edit";
   }
@@ -159,11 +166,14 @@ function editableCellTitle(
 
 function scheduleCellTdClass(
   base: string,
+  assignment: ShiftRow | undefined,
   isSeniorDoctor: boolean,
-  hasAssignment: boolean,
 ): string {
+  if (isOffDayAssignment(assignment)) {
+    return cn(base, "relative ring-2 ring-inset ring-slate-400 bg-white");
+  }
   const seniorHighlight =
-    isSeniorDoctor && hasAssignment
+    isSeniorDoctor && assignment
       ? "bg-amber-50 ring-1 ring-inset ring-amber-200/80"
       : "";
   return cn(base, "relative", seniorHighlight);
@@ -178,6 +188,9 @@ function ScheduleCellContent({
   isSeniorDoctor?: boolean;
   showSeniorStar?: boolean;
 }) {
+  if (isOffDayAssignment(assignment)) {
+    return null;
+  }
   const showStar = showSeniorStar && isSeniorDoctor && !!assignment;
   return (
     <>
@@ -236,16 +249,18 @@ function ReadOnlyScheduleCell({
       title={
         onClick
           ? editableCellTitle(assignment, isSeniorDoctor)
-          : isSeniorDoctor && assignment
-            ? "Senior doctor on duty"
-            : undefined
+          : isOffDayAssignment(assignment)
+            ? "Off day"
+            : isSeniorDoctor && assignment
+              ? "Senior doctor on duty"
+              : undefined
       }
       className={scheduleCellTdClass(
         scheduleDateColumnTdClass(
           onClick ? "cursor-pointer hover:bg-sky-50" : undefined,
         ),
+        assignment,
         isSeniorDoctor,
-        !!assignment,
       )}
     >
       <ScheduleCellContent
@@ -272,8 +287,8 @@ function StaticEditableCell({
       title={editableCellTitle(assignment, isSeniorDoctor)}
       className={scheduleCellTdClass(
         scheduleDateColumnTdClass("cursor-pointer"),
+        assignment,
         isSeniorDoctor,
-        !!assignment,
       )}
     >
       <ScheduleCellContent
@@ -312,8 +327,8 @@ function DroppableScheduleCell({
           scheduleDateColumnTdClass("cursor-pointer"),
           isOver && "bg-sky-100 ring-2 ring-sky-400",
         ),
+        assignment,
         isSeniorDoctor,
-        !!assignment,
       )}
     >
       <ScheduleCellContent
@@ -424,10 +439,12 @@ function DraggableShift({
   id,
   label,
   color,
+  variant = "filled",
 }: {
   id: string;
   label: string;
   color: string;
+  variant?: "filled" | "outline";
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `palette-${id}`,
@@ -437,11 +454,20 @@ function DraggableShift({
     <button
       ref={setNodeRef}
       type="button"
-      className="cursor-grab rounded px-3 py-1.5 text-xs font-semibold text-white shadow-sm active:cursor-grabbing"
-      style={{
-        backgroundColor: color,
-        opacity: isDragging ? 0.5 : 1,
-      }}
+      className={cn(
+        "cursor-grab rounded px-3 py-1.5 text-xs font-semibold shadow-sm active:cursor-grabbing",
+        variant === "outline"
+          ? "border-2 border-slate-400 bg-white text-slate-700"
+          : "text-white",
+      )}
+      style={
+        variant === "filled"
+          ? {
+              backgroundColor: color,
+              opacity: isDragging ? 0.5 : 1,
+            }
+          : { opacity: isDragging ? 0.5 : 1 }
+      }
       {...listeners}
       {...attributes}
     >
@@ -478,6 +504,11 @@ export function ScheduleView({
   const isPublished = monthStatus === "PUBLISHED";
   const isAdminSchedule = scheduleBasePath === "/schedule";
   const editable = !readOnly && isAdminSchedule && !publishedEditMode;
+  const assignableShiftTypes = useMemo(
+    () =>
+      adminAssignableShiftTypes(shiftTypes, { adminSchedule: isAdminSchedule }),
+    [shiftTypes, isAdminSchedule],
+  );
   const useDraft = editable;
   const canEditPublished = publishedEditMode && isAdminSchedule;
   const [draftAssignments, setDraftAssignments] =
@@ -1256,14 +1287,13 @@ export function ScheduleView({
               <span className="self-center text-xs font-medium text-slate-500">
                 Drag onto grid:
               </span>
-              {shiftTypes
-                .filter((t) => t.isActive)
-                .map((t) => (
+              {assignableShiftTypes.map((t) => (
                   <DraggableShift
                     key={t.id}
                     id={t.id}
-                    label={displayShiftCode(t.code)}
+                    label={t.code === "OFF" ? "Off" : displayShiftCode(t.code)}
                     color={t.color}
+                    variant={t.code === "OFF" ? "outline" : "filled"}
                   />
                 ))}
               <Button
@@ -1445,19 +1475,29 @@ export function ScheduleView({
           </DialogHeader>
           {picker && (
             <div className="flex flex-wrap gap-2">
-              {shiftTypes
-                .filter((t) => t.isActive)
-                .map((t) => (
+              {assignableShiftTypes.map((t) => (
                   <Button
                     key={t.id}
                     size="sm"
-                    style={{ backgroundColor: t.color }}
+                    variant={t.code === "OFF" ? "outline" : "default"}
+                    className={
+                      t.code === "OFF"
+                        ? "border-2 border-slate-400 bg-white text-slate-700 hover:bg-slate-50"
+                        : undefined
+                    }
+                    style={
+                      t.code === "OFF" ? undefined : { backgroundColor: t.color }
+                    }
                     disabled={busy}
                     onClick={() =>
                       handleAssign(picker.doctorId, picker.dateStr, t.id)
                     }
                   >
-                    {loading ? "Loading…" : displayShiftCode(t.code)}
+                    {loading
+                      ? "Loading…"
+                      : t.code === "OFF"
+                        ? "Off"
+                        : displayShiftCode(t.code)}
                   </Button>
                 ))}
               <Button

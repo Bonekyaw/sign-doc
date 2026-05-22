@@ -80,7 +80,12 @@ function createPrismaClient() {
 
 function getRawPrismaClient(): PrismaClient {
   const cached = globalForPrisma.rawPrisma;
-  if (cached && "schedulingRules" in cached && "monthSchedule" in cached) {
+  if (
+    cached &&
+    "schedulingRules" in cached &&
+    "monthSchedule" in cached &&
+    "manpowerRatioPreset" in cached
+  ) {
     return cached;
   }
   const client = createPrismaClient();

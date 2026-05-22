@@ -184,6 +184,14 @@ export function validateShiftSequence(
     return fail("A Night shift cannot be followed by a 24-hour shift.");
   }
 
+  // --- Rule 2b: Night → Long Day (only Night or Off may follow Night) ---
+  if (
+    proposedShift === ShiftType.LONG_DAY &&
+    previousShift === ShiftType.NIGHT
+  ) {
+    return fail("A Night shift cannot be followed by a Long Day shift.");
+  }
+
   // --- Rule 3: Long day → 24h (explicitly allowed) ---
   if (
     proposedShift === ShiftType.TWENTY_FOUR &&
@@ -240,7 +248,7 @@ export function validateShiftSequence(
   if (proposedShift === ShiftType.OFF) {
     let beforeOff = 0;
     let cursor = addDays(normalizedDate, -1);
-    while (isOffOnDate(shiftMap, cursor)) {
+    while (getShiftOnDate(shiftMap, cursor) === ShiftType.OFF) {
       beforeOff++;
       cursor = addDays(cursor, -1);
     }

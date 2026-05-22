@@ -56,6 +56,29 @@ describe("validateShiftSequence", () => {
     assert.match(outcome.error ?? "", /Night/i);
   });
 
+  it("blocks NIGHT followed by LONG_DAY", () => {
+    const existing = [shift(doctorId, "2026-05-10", ShiftType.NIGHT)];
+    const outcome = validateShiftSequence(
+      doctorId,
+      parseDateKey("2026-05-11"),
+      ShiftType.LONG_DAY,
+      existing,
+    );
+    assert.equal(outcome.isValid, false);
+    assert.match(outcome.error ?? "", /Night.*Long Day/i);
+  });
+
+  it("allows NIGHT followed by NIGHT", () => {
+    const existing = [shift(doctorId, "2026-05-10", ShiftType.NIGHT)];
+    const outcome = validateShiftSequence(
+      doctorId,
+      parseDateKey("2026-05-11"),
+      ShiftType.NIGHT,
+      existing,
+    );
+    assert.equal(outcome.isValid, true);
+  });
+
   it("allows LONG_DAY followed by TWENTY_FOUR", () => {
     const existing = [shift(doctorId, "2026-05-10", ShiftType.LONG_DAY)];
     const outcome = validateShiftSequence(

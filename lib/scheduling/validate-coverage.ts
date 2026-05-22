@@ -5,6 +5,14 @@ import type {
   ShiftCode,
 } from "@/lib/scheduling/types";
 
+/** 24h duty covers both Long Day and Night bands for manpower ratio purposes. */
+export function shiftCountsTowardBand(
+  shiftCode: ShiftCode,
+  band: "L" | "N",
+): boolean {
+  return shiftCode === band || shiftCode === "TWENTY_FOUR";
+}
+
 export function countBandForDate(
   date: Date,
   band: "L" | "N",
@@ -15,7 +23,7 @@ export function countBandForDate(
   return shifts.filter(
     (s) =>
       dateKey(s.date) === key &&
-      s.shiftCode === band &&
+      shiftCountsTowardBand(s.shiftCode, band) &&
       s.doctorId !== excludeDoctorId,
   ).length;
 }

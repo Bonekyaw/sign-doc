@@ -1,4 +1,4 @@
-import { parseDateKey } from "@/lib/scheduling/dates";
+import { dateKey, parseDateKey } from "@/lib/scheduling/dates";
 import type { AutoAssignProposal } from "@/lib/scheduling/auto-assign";
 import type { SchedulingRulesConfig } from "@/lib/scheduling/rules-types";
 import { validateAssignment } from "@/lib/scheduling/validate-assignment";
@@ -24,12 +24,19 @@ export function filterCompliantProposals(params: {
     (a, b) => a.date.localeCompare(b.date) || a.doctorId.localeCompare(b.doctorId),
   );
 
+  const anchoredKeys = new Set(
+    params.baseShifts.map((s) => `${s.doctorId}__${dateKey(s.date)}`),
+  );
+
   const working: ShiftAssignment[] = [...params.baseShifts];
   const kept: AutoAssignProposal[] = [];
 
   for (const p of sorted) {
     const doctor = doctorsById.get(p.doctorId);
     if (!doctor) continue;
+
+    const proposalKey = `${p.doctorId}__${p.date}`;
+    if (anchoredKeys.has(proposalKey)) continue;
 
     const date = parseDateKey(p.date);
     const coverage = params.getCoverageForDateKey(p.date);

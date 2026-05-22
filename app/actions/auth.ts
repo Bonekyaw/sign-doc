@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AuthError } from "@/lib/auth/errors";
+import { getLoginRedirectPath } from "@/lib/auth/login-redirect";
 import { verifyPassword, hashPassword } from "@/lib/auth/password";
 import {
   createSessionToken,
@@ -13,13 +13,20 @@ import { prisma } from "@/lib/db";
 
 const INVALID_CREDENTIALS = "Invalid username or password.";
 
-export async function login(formData: FormData) {
+export type LoginFormState = {
+  error?: string;
+};
+
+export async function loginAction(
+  _prevState: LoginFormState,
+  formData: FormData,
+): Promise<LoginFormState> {
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "").trim();
 
   if (!username || !password) {
-    return { ok: false as const, error: INVALID_CREDENTIALS };
+    return { error: INVALID_CREDENTIALS };
   }
 
   const user = await prisma.user.findUnique({ where: { username } });
@@ -30,26 +37,23 @@ export async function login(formData: FormData) {
 
   const valid = await verifyPassword(password, passwordHash);
   if (!user || !valid || !user.isActive) {
-    return { ok: false as const, error: INVALID_CREDENTIALS };
+    return { error: INVALID_CREDENTIALS };
   }
 
   if (user.role === "DOCTOR" && !user.doctorId) {
-    return { ok: false as const, error: INVALID_CREDENTIALS };
+    return { error: INVALID_CREDENTIALS };
   }
 
   const token = await createSessionToken(user);
   const cookieStore = await cookies();
   cookieStore.set(sessionCookieOptions(token));
 
-  if (next && next.startsWith("/") && !next.startsWith("//")) {
-    redirect(next);
-  }
+  redirect(getLoginRedirectPath(user.role, next));
+}
 
-  if (user.role === "DOCTOR") {
-    redirect("/my-schedule");
-  }
-
-  redirect("/");
+/** @deprecated Use loginAction with useActionState */
+export async function login(formData: FormData) {
+  return loginAction({}, formData);
 }
 
 export async function logout() {

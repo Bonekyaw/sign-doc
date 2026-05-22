@@ -113,6 +113,36 @@ describe("fillUnderstaffedCoverage", () => {
     );
   });
 
+  it("does not fill L or N when TWENTY_FOUR already satisfies L1-N1 targets", () => {
+    const date = parseDateKey("2026-05-01");
+    const workingShifts: ShiftAssignment[] = [
+      {
+        doctorId: "s1",
+        date,
+        shiftCode: "TWENTY_FOUR",
+        durationHours: 24,
+      },
+    ];
+
+    const result = fillUnderstaffedCoverage({
+      doctors,
+      shiftTypes,
+      workingShifts,
+      monthKeys,
+      getCoverageForDateKey: () => ({
+        dayShiftTarget: 1,
+        nightShiftTarget: 1,
+      }),
+      rules: {
+        ...DEFAULT_SCHEDULING_RULES,
+        requireSeniorOnDayBand: false,
+        requireSeniorOnNightBand: false,
+      },
+    });
+
+    assert.equal(result.proposals.length, 0);
+  });
+
   it("prefers seniors when a band still needs a senior", () => {
     const date = parseDateKey("2026-05-01");
     const workingShifts: ShiftAssignment[] = [

@@ -29,6 +29,14 @@ const shiftTypes: ShiftTypeInfo[] = [
     color: "#6366f1",
     isActive: true,
   },
+  {
+    id: "off",
+    code: "OFF",
+    label: "Off",
+    durationHours: 0,
+    color: "#94a3b8",
+    isActive: false,
+  },
 ];
 
 const doctors: DoctorInfo[] = [
@@ -135,5 +143,21 @@ describe("validateAssignment over-coverage", () => {
 
     assert.equal(result.ok, true);
     assert.match(result.warnings.join(" "), /Over target day coverage \(5\/4\)/);
+  });
+
+  it("allows inactive OFF for admin manual edits", () => {
+    const result = validateAssignment({
+      doctor: doctors[0]!,
+      date,
+      shiftCode: "OFF",
+      shiftTypes,
+      existingShifts: [],
+      monthKeys,
+      coverageTarget,
+      doctors,
+      purpose: "manualEdit",
+    });
+
+    assert.equal(result.ok, true);
   });
 });

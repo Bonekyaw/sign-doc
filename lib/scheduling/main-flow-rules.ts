@@ -6,7 +6,7 @@ import { DEFAULT_SCHEDULING_RULES } from "@/lib/scheduling/rules-types";
  *
  * - Senior on Day (L) and Night (N) when a band is staffed
  * - After 24h: at least 1 day off (admin may configure 2)
- * - Long Day may be followed by 24h; Night may not
+ * - Long Day may be followed by 24h; Night may not be followed by Long Day or 24h
  * - At most 2 consecutive L or N (cannot work 3 in a row)
  * - At most 3 consecutive off days (not 4)
  * - Full-time target 240h / half-time 120h (per-doctor targets from profile)

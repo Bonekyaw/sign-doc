@@ -54,7 +54,11 @@ export function validateAssignment(params: {
     return { ok: false, errors: ["Unknown shift type."], warnings: [] };
   }
   if (!config.isActive) {
-    return { ok: false, errors: ["This shift type is inactive."], warnings: [] };
+    const allowInactiveOff =
+      shiftCode === "OFF" && purpose === "manualEdit";
+    if (!allowInactiveOff) {
+      return { ok: false, errors: ["This shift type is inactive."], warnings: [] };
+    }
   }
 
   const restrictionError = validateRestrictions(doctor, shiftCode);

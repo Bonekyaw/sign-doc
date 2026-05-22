@@ -1,30 +1,28 @@
 import { z } from "zod";
 import {
   isValidManpowerRatio,
-  MANPOWER_PRESETS,
+  MAX_DAY_SHIFT_TARGET,
+  MAX_NIGHT_SHIFT_TARGET,
+  MIN_DAY_SHIFT_TARGET,
+  MIN_NIGHT_SHIFT_TARGET,
 } from "@/lib/scheduling/constants";
-
-const manpowerPresetIdSchema = z.enum([
-  MANPOWER_PRESETS[0].id,
-  MANPOWER_PRESETS[1].id,
-  MANPOWER_PRESETS[2].id,
-]);
 
 export const coverageTargetSchema = z
   .object({
-    dayShiftTarget: z.number().int(),
-    nightShiftTarget: z.number().int(),
+    dayShiftTarget: z
+      .number()
+      .int()
+      .min(MIN_DAY_SHIFT_TARGET)
+      .max(MAX_DAY_SHIFT_TARGET),
+    nightShiftTarget: z
+      .number()
+      .int()
+      .min(MIN_NIGHT_SHIFT_TARGET)
+      .max(MAX_NIGHT_SHIFT_TARGET),
   })
-  .refine(
-    (v) => isValidManpowerRatio(v.dayShiftTarget, v.nightShiftTarget),
-    {
-      message: `Manpower must be one of: ${MANPOWER_PRESETS.map((p) => p.label).join(", ")}.`,
-    },
-  );
-
-export const manpowerPresetSchema = z.object({
-  presetId: manpowerPresetIdSchema,
-});
+  .refine((v) => isValidManpowerRatio(v.dayShiftTarget, v.nightShiftTarget), {
+    message: `Long day must be ${MIN_DAY_SHIFT_TARGET}–${MAX_DAY_SHIFT_TARGET} and Night must be ${MIN_NIGHT_SHIFT_TARGET}–${MAX_NIGHT_SHIFT_TARGET}.`,
+  });
 
 export const monthCoverageSchema = coverageTargetSchema.extend({
   year: z.number().int().min(2000).max(2100),
@@ -36,4 +34,3 @@ export const dailyCoverageSchema = coverageTargetSchema.extend({
 });
 
 export type CoverageTargetInput = z.infer<typeof coverageTargetSchema>;
-export type ManpowerPresetInput = z.infer<typeof manpowerPresetSchema>;

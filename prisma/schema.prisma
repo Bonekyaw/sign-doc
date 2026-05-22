@@ -135,6 +135,18 @@ model DailyCoverage {
   @@map("daily_coverage")
 }
 
+model ManpowerRatioPreset {
+  id               String   @id @default(cuid())
+  dayShiftTarget   Int      @map("day_shift_target")
+  nightShiftTarget Int      @map("night_shift_target")
+  label            String?
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([dayShiftTarget, nightShiftTarget])
+  @@map("manpower_ratio_presets")
+}
+
 model MonthSchedule {
   id          String              @id @default(cuid())
   year        Int

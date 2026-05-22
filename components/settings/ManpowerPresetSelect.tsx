@@ -1,11 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import {
-  MANPOWER_PRESETS,
+  findManpowerPreset,
+  formatManpowerRatio,
   normalizeManpowerTargets,
   presetIdToTargets,
   targetsToPresetId,
-  type ManpowerPresetId,
+  type ManpowerRatioOption,
 } from "@/lib/scheduling/constants";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,6 +21,7 @@ import {
 type Props = {
   dayTarget: number;
   nightTarget: number;
+  presets: ManpowerRatioOption[];
   onChange: (day: number, night: number) => void;
   label?: string;
   className?: string;
@@ -28,6 +31,7 @@ type Props = {
 export function ManpowerPresetSelect({
   dayTarget,
   nightTarget,
+  presets,
   onChange,
   label = "Manpower (Long day – Night)",
   className,
@@ -35,10 +39,37 @@ export function ManpowerPresetSelect({
 }: Props) {
   const normalized = normalizeManpowerTargets(dayTarget, nightTarget);
   const presetId =
-    targetsToPresetId(
+    targetsToPresetId(normalized.dayShiftTarget, normalized.nightShiftTarget) ??
+    "L4-N3";
+  const options = useMemo(() => {
+    if (
+      findManpowerPreset(
+        presets,
+        normalized.dayShiftTarget,
+        normalized.nightShiftTarget,
+      )
+    ) {
+      return presets;
+    }
+    return [
+      ...presets,
+      {
+        id: presetId,
+        dayShiftTarget: normalized.dayShiftTarget,
+        nightShiftTarget: normalized.nightShiftTarget,
+        label: formatManpowerRatio(
+          normalized.dayShiftTarget,
+          normalized.nightShiftTarget,
+        ),
+      },
+    ];
+  }, [presets, normalized.dayShiftTarget, normalized.nightShiftTarget, presetId]);
+  const currentLabel =
+    findManpowerPreset(
+      options,
       normalized.dayShiftTarget,
       normalized.nightShiftTarget,
-    ) ?? "L4-N3";
+    )?.label ?? formatManpowerRatio(normalized.dayShiftTarget, normalized.nightShiftTarget);
 
   return (
     <div className={className}>
@@ -46,9 +77,7 @@ export function ManpowerPresetSelect({
       <Select
         value={presetId}
         onValueChange={(v) => {
-          const { dayShiftTarget, nightShiftTarget } = presetIdToTargets(
-            v as ManpowerPresetId,
-          );
+          const { dayShiftTarget, nightShiftTarget } = presetIdToTargets(v);
           if (
             dayShiftTarget === normalized.dayShiftTarget &&
             nightShiftTarget === normalized.nightShiftTarget
@@ -59,20 +88,20 @@ export function ManpowerPresetSelect({
         }}
       >
         <SelectTrigger>
-          <SelectValue />
+          <SelectValue>{currentLabel}</SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {MANPOWER_PRESETS.map((p) => (
+          {options.map((p) => (
             <SelectItem key={p.id} value={p.id}>
-              {p.label}
+              {p.builtIn ? p.label : `${p.label}${p.dbId ? " (custom)" : ""}`}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
       {showHint ? (
         <p className="mt-1 text-xs text-slate-500">
-          L = Long day doctors, N = Night doctors. Schedule is correct when each
-          day matches the selected ratio.
+          L = Long day doctors, N = Night doctors. Add more ratios below the
+          month defaults.
         </p>
       ) : null}
     </div>

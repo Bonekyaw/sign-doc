@@ -4,6 +4,7 @@ import { autoAssign } from "@/lib/scheduling/auto-assign";
 import { rulesForAutoAssign } from "@/lib/scheduling/main-flow-rules";
 import {
   auditMainFlowSchedule,
+  hasNightBeforeLongDay,
   hasNightBeforeTwentyFour,
   validateShiftsAgainstMainFlow,
 } from "@/lib/scheduling/validate-main-flow";
@@ -209,7 +210,7 @@ describe("validateShiftsAgainstMainFlow", () => {
 });
 
 describe("autoAssign main-flow compliance", () => {
-  it("never proposes Night followed by 24-hour shift", () => {
+  it("never proposes Night followed by Long Day or 24-hour shift", () => {
     const result = autoAssign({
       year: 2026,
       month: 5,
@@ -229,6 +230,7 @@ describe("autoAssign main-flow compliance", () => {
       durationHours: p.durationHours,
     }));
     assert.equal(hasNightBeforeTwentyFour(shifts), false);
+    assert.equal(hasNightBeforeLongDay(shifts), false);
 
     const violations = auditMainFlowSchedule({
       year: 2026,
@@ -239,6 +241,10 @@ describe("autoAssign main-flow compliance", () => {
     });
     assert.equal(
       violations.filter((v) => /Night.*24|24.*Night/i.test(v)).length,
+      0,
+    );
+    assert.equal(
+      violations.filter((v) => /Night.*Long Day|Long Day.*Night/i.test(v)).length,
       0,
     );
     assert.equal(violations.length, 0);
@@ -256,6 +262,26 @@ describe("autoAssign main-flow compliance", () => {
         `${doctor.name} must not have 3+ consecutive N`,
       );
     }
+  });
+
+  it("uses 24-hour shifts when filling monthly hour targets", () => {
+    const result = autoAssign({
+      year: 2026,
+      month: 5,
+      doctors,
+      shiftTypes,
+      existingShifts: [],
+      monthDefaults: { dayShiftTarget: 1, nightShiftTarget: 1 },
+      dailyOverrides: new Map(),
+      leaveByDoctor: new Map(),
+      rules: DEFAULT_SCHEDULING_RULES,
+    });
+
+    const h24 = result.proposals.filter((p) => p.shiftCode === "TWENTY_FOUR");
+    assert.ok(
+      h24.length >= 2,
+      "auto-assign should place multiple 24h shifts toward monthly targets",
+    );
   });
 
   it("allows Long Day followed by 24-hour when rules permit", () => {

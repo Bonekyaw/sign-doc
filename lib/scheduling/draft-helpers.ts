@@ -89,7 +89,12 @@ export function mergeReconcileIntoDraft(
   shiftTypes: ShiftTypeLike[],
 ): DraftShiftRow[] {
   const manual = draft.filter((r) => r.source === "MANUAL");
-  const autoRows = proposals.map((p) => proposalToDraftRow(p, shiftTypes));
+  const manualKeys = new Set(manual.map((r) => `${r.doctorId}__${r.date}`));
+  const autoRows = proposals
+    .filter(
+      (p) => !manualKeys.has(`${p.doctorId}__${normalizeDateStr(p.date)}`),
+    )
+    .map((p) => proposalToDraftRow(p, shiftTypes));
   return [...manual, ...autoRows];
 }
 

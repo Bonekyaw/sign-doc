@@ -11,14 +11,13 @@ import {
 } from "@/app/actions/coverage";
 import {
   normalizeManpowerTargets,
-  presetIdToTargets,
-  targetsToPresetId,
-  type ManpowerPresetId,
+  type ManpowerRatioOption,
 } from "@/lib/scheduling/constants";
 import {
   coverageTargetSchema,
   type CoverageTargetInput,
 } from "@/lib/schemas/coverage";
+import { ManpowerPresetsManager } from "@/components/settings/ManpowerPresetsManager";
 import { ManpowerPresetSelect } from "@/components/settings/ManpowerPresetSelect";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -30,6 +29,8 @@ type Props = {
   dayTarget: number;
   nightTarget: number;
   monthKeys: string[];
+  presets: ManpowerRatioOption[];
+  dailyOverrides: Record<string, { dayShiftTarget: number; nightShiftTarget: number }>;
   canWrite?: boolean;
 };
 
@@ -39,6 +40,8 @@ export function CoverageEditor({
   dayTarget,
   nightTarget,
   monthKeys,
+  presets,
+  dailyOverrides,
   canWrite = true,
 }: Props) {
   const router = useRouter();
@@ -70,8 +73,10 @@ export function CoverageEditor({
       <PageHeader
         eyebrow="Settings"
         title="Coverage requirements"
-        description="Choose one manpower ratio for the month: L3-N3, L3-N2, or L4-N3 (Long day and Night doctor counts)."
+        description="Choose a Long day / Night ratio for the month, add custom presets, or override individual dates."
       />
+
+      <ManpowerPresetsManager presets={presets} canWrite={canWrite} />
 
       <Card className="max-w-md">
         <CardHeader>
@@ -82,6 +87,7 @@ export function CoverageEditor({
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <ManpowerPresetSelect
+              presets={presets}
               dayTarget={form.watch("dayShiftTarget")}
               nightTarget={form.watch("nightShiftTarget")}
               onChange={(day, night) => {
@@ -124,6 +130,8 @@ export function CoverageEditor({
                   dayTarget: normalized.dayShiftTarget,
                   nightTarget: normalized.nightShiftTarget,
                 }}
+                initialOverride={dailyOverrides[key]}
+                presets={presets}
                 canWrite={canWrite}
                 onSaved={() => router.refresh()}
               />
@@ -138,21 +146,28 @@ export function CoverageEditor({
 function DailyOverrideRow({
   dateKey,
   defaults,
+  initialOverride,
+  presets,
   canWrite,
   onSaved,
 }: {
   dateKey: string;
   defaults: { dayTarget: number; nightTarget: number };
+  initialOverride?: { dayShiftTarget: number; nightShiftTarget: number };
+  presets: ManpowerRatioOption[];
   canWrite: boolean;
   onSaved: () => void;
 }) {
   const [busy, setBusy] = useState<"override" | "clear" | null>(null);
-  const [dayTarget, setDayTarget] = useState(defaults.dayTarget);
-  const [nightTarget, setNightTarget] = useState(defaults.nightTarget);
-
-  const presetId =
-    targetsToPresetId(dayTarget, nightTarget) ??
-    (targetsToPresetId(defaults.dayTarget, defaults.nightTarget) ?? "L4-N3");
+  const initialTargets = initialOverride
+    ? normalizeManpowerTargets(
+        initialOverride.dayShiftTarget,
+        initialOverride.nightShiftTarget,
+      )
+    : normalizeManpowerTargets(defaults.dayTarget, defaults.nightTarget);
+  const [dayTarget, setDayTarget] = useState(initialTargets.dayShiftTarget);
+  const [nightTarget, setNightTarget] = useState(initialTargets.nightShiftTarget);
+  const hasOverride = !!initialOverride;
 
   return (
     <form
@@ -169,7 +184,13 @@ function DailyOverrideRow({
       className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-100 bg-sky-50/30 p-3 text-sm"
     >
       <span className="w-28 font-mono text-slate-700">{dateKey}</span>
+      {hasOverride ? (
+        <span className="rounded bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+          Override
+        </span>
+      ) : null}
       <ManpowerPresetSelect
+        presets={presets}
         dayTarget={dayTarget}
         nightTarget={nightTarget}
         showHint={false}
@@ -193,14 +214,13 @@ function DailyOverrideRow({
             type="button"
             size="sm"
             variant="ghost"
-            disabled={busy !== null}
+            disabled={busy !== null || !hasOverride}
             onClick={async () => {
               setBusy("clear");
               try {
                 await clearDailyCoverage(dateKey);
-                const reset = presetIdToTargets(presetId as ManpowerPresetId);
-                setDayTarget(reset.dayShiftTarget);
-                setNightTarget(reset.nightShiftTarget);
+                setDayTarget(defaults.dayTarget);
+                setNightTarget(defaults.nightTarget);
                 onSaved();
               } finally {
                 setBusy(null);

@@ -21,3 +21,7 @@ export function rotationTemplatesTag() {
 export function schedulingRulesTag() {
   return "scheduling-rules";
 }
+
+export function manpowerPresetsTag() {
+  return "manpower-presets";
+}

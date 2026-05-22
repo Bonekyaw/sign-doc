@@ -96,65 +96,6 @@ function doctorWorksOnDate(
   );
 }
 
-function canAssignLnSlotForDoctor(params: {
-  doctor: DoctorInfo;
-  doctors: DoctorInfo[];
-  shiftTypes: ShiftTypeInfo[];
-  workingShifts: ShiftAssignment[];
-  monthKeys: string[];
-  getCoverageForDateKey: (dateKeyStr: string) => CoverageTarget;
-  leaveByDoctor: Map<string, Set<string>>;
-  rules: SchedulingRulesConfig;
-}): boolean {
-  const {
-    doctor,
-    doctors,
-    shiftTypes,
-    workingShifts,
-    monthKeys,
-    getCoverageForDateKey,
-    leaveByDoctor,
-    rules,
-  } = params;
-
-  for (const key of monthKeys) {
-    if (doctorWorksOnDate(doctor.id, key, workingShifts)) continue;
-    const date = parseDateKey(key);
-    if (isOnApprovedLeave(doctor.id, date, leaveByDoctor)) continue;
-    const coverage = getCoverageForDateKey(key);
-
-    for (const band of ["L", "N"] as const) {
-      if (
-        !mayPlaceOnBand({
-          doctor,
-          date,
-          band,
-          workingShifts,
-          doctors,
-          rules,
-        })
-      ) {
-        continue;
-      }
-
-      const eligible = getEligibleDoctors({
-        doctors,
-        date,
-        shiftCode: band,
-        shiftTypes,
-        workingShifts,
-        monthKeys,
-        coverageTarget: coverage,
-        leaveByDoctor,
-        rules,
-        purpose: "hoursFill",
-      }).some((e) => e.doctor.id === doctor.id);
-      if (eligible) return true;
-    }
-  }
-  return false;
-}
-
 function hasOpenDateAfter(
   doctorId: string,
   currentKey: string,
@@ -203,24 +144,19 @@ function orderSlotsForDoctor(
     const score = (slot: HourSlot) => {
       let s = 0;
       if (slot.hours > remaining) return 1000 + slot.hours;
-      // L/N first; 24h only in the second phase and when it closes the gap cleanly.
+      // Prefer 24h when the doctor still needs at least 24h and rules allow it.
       if (slot.code === "TWENTY_FOUR") {
-        s += 500;
-        if (
-          allowTwentyFour &&
-          remaining >= slot.hours &&
-          !openAfter
-        ) {
-          s -= 800;
+        if (allowTwentyFour && remaining >= slot.hours) {
+          s -= 900;
+          if (slot.hours === remaining) s -= 200;
+          if (!openAfter && remaining === slot.hours) s -= 100;
+        } else {
+          s += 500;
         }
-      } else if (slot.code === "L") {
-        s -= 10;
-        if (
-          allowTwentyFour &&
-          remaining >= 24 &&
-          !openAfter
-        ) {
-          s += 800;
+      } else if (slot.band) {
+        s += 120;
+        if (allowTwentyFour && remaining >= 24 && !openAfter) {
+          s += 300;
         }
       }
       // Prefer shifts that land exactly on the monthly target.
@@ -280,19 +216,16 @@ export function fillHoursToTarget(params: FillHoursParams): FillHoursResult {
     leaveByDoctor = new Map(),
   } = params;
 
-  const lnSlots = buildHourSlots(shiftTypes, false);
   const allSlots = buildHourSlots(shiftTypes, true);
-  if (lnSlots.length === 0 && allSlots.length === 0) {
+  if (allSlots.length === 0) {
     return { proposals: [], shortfalls: [], warnings: [] };
   }
 
   const proposals: AutoAssignProposal[] = [];
   const warnings: string[] = [];
-  let allowTwentyFour = false;
+  const allowTwentyFour = allSlots.some((s) => s.code === "TWENTY_FOUR");
 
   while (true) {
-    const baseSlots = allowTwentyFour ? allSlots : lnSlots;
-    if (baseSlots.length === 0) break;
     const needy = doctors
       .map((doctor) => ({
         doctor,
@@ -337,7 +270,7 @@ export function fillHoursToTarget(params: FillHoursParams): FillHoursResult {
         const date = parseDateKey(key);
         const coverage = getCoverageForDateKey(key);
         const orderedSlots = orderSlotsForDoctor(
-          baseSlots,
+          allSlots,
           doctor,
           date,
           key,
@@ -356,57 +289,6 @@ export function fillHoursToTarget(params: FillHoursParams): FillHoursResult {
             workingShifts,
           );
           if (remaining < slot.hours) continue;
-
-          const openAfter = hasOpenDateAfter(
-            doctor.id,
-            key,
-            monthKeys,
-            workingShifts,
-            leaveByDoctor,
-          );
-          const strandWithTwentyFour =
-            allowTwentyFour &&
-            slot.code === "TWENTY_FOUR" &&
-            remaining >= slot.hours &&
-            !openAfter;
-
-          if (
-            slot.code === "TWENTY_FOUR" &&
-            canAssignLnSlotForDoctor({
-              doctor,
-              doctors,
-              shiftTypes,
-              workingShifts,
-              monthKeys,
-              getCoverageForDateKey,
-              leaveByDoctor,
-              rules,
-            }) &&
-            !strandWithTwentyFour
-          ) {
-            continue;
-          }
-
-          if (
-            !allowTwentyFour &&
-            slot.band &&
-            slot.hours < 24
-          ) {
-            const after = remaining - slot.hours;
-            if (
-              after > 0 &&
-              after < 24 &&
-              !hasOpenDateAfter(
-                doctor.id,
-                key,
-                monthKeys,
-                workingShifts,
-                leaveByDoctor,
-              )
-            ) {
-              continue;
-            }
-          }
 
           if (
             slot.band &&
@@ -476,10 +358,6 @@ export function fillHoursToTarget(params: FillHoursParams): FillHoursResult {
     }
 
     if (!progress) {
-      if (!allowTwentyFour && allSlots.length > lnSlots.length) {
-        allowTwentyFour = true;
-        continue;
-      }
       break;
     }
   }

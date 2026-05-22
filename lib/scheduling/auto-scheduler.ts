@@ -17,6 +17,8 @@ import {
   type ShiftRecord,
 } from "@/lib/scheduling/shift-validation-service";
 import type { SchedulingRulesConfig } from "@/lib/scheduling/rules-types";
+import { bandHasSenior } from "@/lib/scheduling/validate-senior-manpower";
+import { countBandForDate } from "@/lib/scheduling/validate-coverage";
 import type {
   CoverageTarget,
   DoctorInfo,
@@ -122,8 +124,12 @@ export class AutoScheduler {
     }
   }
 
-  /** Main entry: L/N coverage per day; 24h is deferred to hour-fill when necessary. */
+  /** Main entry: optional 24h first, then L/N gap-fill per day. */
   generateSchedule(includeTwentyFour = false): AutoSchedulerResult {
+    if (includeTwentyFour) {
+      this.fillTwentyFourShifts();
+    }
+
     for (const key of this.monthKeys) {
       const date = parseDateKey(key);
       const req = this.dailyRequirement(key);
@@ -131,10 +137,6 @@ export class AutoScheduler {
       this.fillShiftType(date, key, ShiftType.LONG_DAY, req.longDayCount);
       this.fillShiftType(date, key, ShiftType.NIGHT, req.nightCount);
       this.markUnassignedAsOff(date, key);
-    }
-
-    if (includeTwentyFour) {
-      this.fillTwentyFourShifts();
     }
 
     return {
@@ -177,9 +179,12 @@ export class AutoScheduler {
     const config = this.shiftConfigs.get(shiftType);
     if (!config || requiredCount <= 0) return;
 
+    const band = shiftType === ShiftType.LONG_DAY ? "L" : "N";
     const assignedThisBand: DoctorInfo[] = [];
+    const doctorsById = new Map(this.doctors.map((d) => [d.id, d]));
 
-    for (let slot = 0; slot < requiredCount; slot++) {
+    while (countBandForDate(date, band, this.getWorkingShifts()) < requiredCount) {
+      const slot = assignedThisBand.length;
       const eligible = this.doctors.filter(
         (doc) =>
           !assignedThisBand.some((d) => d.id === doc.id) &&
@@ -190,15 +195,16 @@ export class AutoScheduler {
       );
 
       if (eligible.length === 0) {
+        const current = countBandForDate(date, band, this.getWorkingShifts());
         this.warnings.push(
-          `${key} ${config.shiftCode}: understaffed — need ${requiredCount}, assigned ${assignedThisBand.length} (no eligible doctor).`,
+          `${key} ${config.shiftCode}: understaffed — need ${requiredCount}, assigned ${current} (no eligible doctor).`,
         );
         break;
       }
 
-      const hasSenior = assignedThisBand.some(
-        (d) => d.seniority === "SENIOR",
-      );
+      const hasSenior =
+        bandHasSenior(date, band, this.getWorkingShifts(), doctorsById) ||
+        assignedThisBand.some((d) => d.seniority === "SENIOR");
 
       eligible.sort((a, b) => this.compareCandidates(
         a,
@@ -210,9 +216,10 @@ export class AutoScheduler {
 
       let placed = false;
       for (const doctor of eligible) {
-        const trialBand = [...assignedThisBand, doctor].map(
-          doctorInfoToDoctorRecord,
-        );
+        const trialBand = this.doctorsForBandManpower(date, band, [
+          ...assignedThisBand,
+          doctor,
+        ]);
         const manpower = validateDailyManpower(date, shiftType, trialBand);
         if (!manpower.isValid) continue;
 
@@ -226,17 +233,42 @@ export class AutoScheduler {
         this.warnings.push(
           `${key} ${config.shiftCode}: could not place slot ${slot + 1}/${requiredCount} (senior manpower or rules).`,
         );
+        break;
       }
     }
 
     if (
-      assignedThisBand.length > 0 &&
-      !assignedThisBand.some((d) => d.seniority === "SENIOR")
+      countBandForDate(date, band, this.getWorkingShifts()) > 0 &&
+      !bandHasSenior(date, band, this.getWorkingShifts(), doctorsById)
     ) {
       this.warnings.push(
         `${key} ${config.shiftCode}: staffed without a Senior (main-flow requires at least one Senior on L/N).`,
       );
     }
+  }
+
+  private doctorsForBandManpower(
+    date: Date,
+    band: "L" | "N",
+    additional: DoctorInfo[],
+  ) {
+    const key = dateKey(date);
+    const ids = new Set<string>();
+    for (const s of this.getWorkingShifts()) {
+      if (dateKey(s.date) !== key) continue;
+      if (s.shiftCode === band || s.shiftCode === "TWENTY_FOUR") {
+        ids.add(s.doctorId);
+      }
+    }
+    for (const doctor of additional) {
+      ids.add(doctor.id);
+    }
+    return [...ids]
+      .map((id) => {
+        const doctor = this.doctors.find((d) => d.id === id);
+        return doctor ? doctorInfoToDoctorRecord(doctor) : null;
+      })
+      .filter((d): d is NonNullable<typeof d> => d !== null);
   }
 
   private compareCandidates(
@@ -271,35 +303,45 @@ export class AutoScheduler {
     return rotA - rotB;
   }
 
-  /** Assign 24h where legal and under monthly target (sorted by largest hour deficit). */
+  /** Assign 24h where legal, under monthly target, and the day still has band gaps (one per doctor per run). */
   private fillTwentyFourShifts() {
     const config = this.shiftConfigs.get(ShiftType.TWENTY_FOUR);
     if (!config) return;
 
-    for (const key of this.monthKeys) {
-      const date = parseDateKey(key);
-      const candidates = this.doctors
-        .filter(
-          (d) =>
-            !this.isAnchored(d.id, key) &&
-            !this.hasWorkOnDate(d.id, date) &&
-            !isOnApprovedLeave(d.id, date, this.leaveByDoctor),
-        )
-        .sort(
-          (a, b) =>
-            b.targetHours -
-            this.getWorkedHours(b.id) -
-            (a.targetHours - this.getWorkedHours(a.id)),
-        );
+    const placedTwentyFour = new Set<string>();
+    const orderedDoctors = [...this.doctors].sort(
+      (a, b) =>
+        b.targetHours -
+        this.getWorkedHours(b.id) -
+        (a.targetHours - this.getWorkedHours(a.id)),
+    );
 
-      for (const doctor of candidates) {
-        if (this.getWorkedHours(doctor.id) + config.hours > doctor.targetHours) {
-          continue;
-        }
+    for (const doctor of orderedDoctors) {
+      if (placedTwentyFour.has(doctor.id)) continue;
+      if (
+        this.getWorkedHours(doctor.id) + config.hours >
+        doctor.targetHours
+      ) {
+        continue;
+      }
+
+      for (const key of this.monthKeys) {
+        const date = parseDateKey(key);
+        if (this.isAnchored(doctor.id, key)) continue;
+        if (this.hasWorkOnDate(doctor.id, date)) continue;
+        if (isOnApprovedLeave(doctor.id, date, this.leaveByDoctor)) continue;
+
+        const req = this.dailyRequirement(key);
+        const lCount = countBandForDate(date, "L", this.getWorkingShifts());
+        const nCount = countBandForDate(date, "N", this.getWorkingShifts());
+        if (lCount >= req.longDayCount && nCount >= req.nightCount) continue;
+
         if (!this.canWorkShift(doctor, date, ShiftType.TWENTY_FOUR)) {
           continue;
         }
         this.assignRecord(doctor.id, date, ShiftType.TWENTY_FOUR);
+        placedTwentyFour.add(doctor.id);
+        break;
       }
     }
   }

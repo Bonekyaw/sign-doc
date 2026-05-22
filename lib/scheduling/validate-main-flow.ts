@@ -164,6 +164,22 @@ export function validateShiftsAgainstMainFlow(params: {
   return violations;
 }
 
+/** True when Night → Long Day appears in the schedule (forbidden by main-flow). */
+export function hasNightBeforeLongDay(
+  shifts: ShiftAssignment[],
+): boolean {
+  for (const s of shifts) {
+    if (s.shiftCode !== "L") continue;
+    const prevKey = dateKey(addDays(s.date, -1));
+    const prev = shifts.find(
+      (x) =>
+        x.doctorId === s.doctorId && dateKey(x.date) === prevKey,
+    );
+    if (prev?.shiftCode === "N") return true;
+  }
+  return false;
+}
+
 /** True when Night → 24h appears in the schedule (forbidden by main-flow). */
 export function hasNightBeforeTwentyFour(
   shifts: ShiftAssignment[],

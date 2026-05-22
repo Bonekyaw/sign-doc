@@ -96,7 +96,7 @@ describe("fillHoursToTarget", () => {
     assert.ok(worked >= 12, "should move toward target");
   });
 
-  it("prefers L/N over TWENTY_FOUR when both can reach the target", () => {
+  it("prefers TWENTY_FOUR when target is 24h and rules allow", () => {
     const workingShifts: ShiftAssignment[] = [];
     const result = fillHoursToTarget({
       doctors: [
@@ -110,22 +110,17 @@ describe("fillHoursToTarget", () => {
       ],
       shiftTypes,
       workingShifts,
-      monthKeys: ["2026-05-01", "2026-05-02"],
+      monthKeys: ["2026-05-01", "2026-05-02", "2026-05-03"],
       getCoverageForDateKey: () => monthDefaults,
       leaveByDoctor: new Map(),
       rules,
     });
 
-    assert.equal(result.proposals.length, 2);
-    assert.ok(
-      result.proposals.every(
-        (p) => p.shiftCode === "L" || p.shiftCode === "N",
-      ),
-      "24h must not be used when two L/N shifts suffice",
-    );
+    assert.equal(result.proposals.length, 1);
+    assert.equal(result.proposals[0]?.shiftCode, "TWENTY_FOUR");
   });
 
-  it("uses TWENTY_FOUR only when L/N alone cannot close the gap", () => {
+  it("uses TWENTY_FOUR to close larger hour gaps when legal", () => {
     const workingShifts: ShiftAssignment[] = [];
     const result = fillHoursToTarget({
       doctors: [
@@ -139,18 +134,14 @@ describe("fillHoursToTarget", () => {
       ],
       shiftTypes,
       workingShifts,
-      monthKeys: ["2026-05-01", "2026-05-02", "2026-05-03"],
+      monthKeys: ["2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04"],
       getCoverageForDateKey: () => monthDefaults,
       leaveByDoctor: new Map(),
       rules,
     });
 
-    const ln = result.proposals.filter(
-      (p) => p.shiftCode === "L" || p.shiftCode === "N",
-    );
     const h24 = result.proposals.filter((p) => p.shiftCode === "TWENTY_FOUR");
-    assert.ok(ln.length >= 2, "should use L/N on earlier days first");
-    assert.equal(h24.length, 1, "one 24h closes the gap after L/N days are used");
+    assert.ok(h24.length >= 1, "should include at least one 24h shift");
     const worked = result.proposals.reduce((s, p) => s + p.durationHours, 0);
     assert.equal(worked, 48);
   });
@@ -265,10 +256,9 @@ describe("fillAllDoctorsToTarget", () => {
     }
     assert.equal(result.shortfalls.length, 0);
     const h24 = result.proposals.filter((p) => p.shiftCode === "TWENTY_FOUR");
-    assert.equal(
-      h24.length,
-      0,
-      "all doctors should reach monthly targets using L/N only when rules allow",
+    assert.ok(
+      h24.length >= 1,
+      "full-time targets should use 24h shifts when rules allow",
     );
   });
 });
