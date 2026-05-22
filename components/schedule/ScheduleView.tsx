@@ -59,7 +59,7 @@ import { seniorityLabel } from "@/lib/utils/seniority";
 
 type ShiftTypeRow = {
   id: string;
-  code: string;
+  code: ShiftCode;
   label: string;
   color: string;
   durationHours: number;
