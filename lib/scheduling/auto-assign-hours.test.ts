@@ -49,6 +49,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 24,
     seniority: "SENIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "d2",
@@ -56,6 +57,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "SENIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
 ];
 
@@ -106,6 +108,7 @@ describe("fillHoursToTarget", () => {
           targetHours: 24,
           seniority: "SENIOR",
           restrictions: [],
+    schedulingRuleExempt: false,
         },
       ],
       shiftTypes,
@@ -130,6 +133,7 @@ describe("fillHoursToTarget", () => {
           targetHours: 48,
           seniority: "SENIOR",
           restrictions: [],
+    schedulingRuleExempt: false,
         },
       ],
       shiftTypes,
@@ -146,21 +150,14 @@ describe("fillHoursToTarget", () => {
     assert.equal(worked, 48);
   });
 
-  it("prefers understaffed L/N bands when filling monthly hours", () => {
-    const workingShifts: ShiftAssignment[] = [
-      {
-        doctorId: "d2",
-        date: parseDateKey("2026-05-02"),
-        shiftCode: "L",
-        durationHours: 12,
-      },
-    ];
+  it("prefers TWENTY_FOUR when any band has a gap and doctor needs 24h+", () => {
+    const workingShifts: ShiftAssignment[] = [];
 
     const result = fillHoursToTarget({
       doctors: [doctors[1]!],
       shiftTypes,
       workingShifts,
-      monthKeys: ["2026-05-01", "2026-05-02"],
+      monthKeys: ["2026-05-01", "2026-05-02", "2026-05-03"],
       getCoverageForDateKey: (key) =>
         key === "2026-05-01"
           ? { dayShiftTarget: 2, nightShiftTarget: 1 }
@@ -180,7 +177,11 @@ describe("fillHoursToTarget", () => {
       "2026-05-01",
       "should visit understaffed day before days already at band target",
     );
-    assert.equal(first.shiftCode, "L");
+    assert.equal(
+      first.shiftCode,
+      "TWENTY_FOUR",
+      "24h should win when any band gap exists and remaining hours allow",
+    );
   });
 
   it("does not propose shifts that would exceed targetHours", () => {
@@ -214,6 +215,7 @@ describe("fillAllDoctorsToTarget", () => {
         targetHours: 240,
         seniority: "SENIOR",
         restrictions: [],
+    schedulingRuleExempt: false,
       },
       {
         id: "s2",
@@ -221,6 +223,7 @@ describe("fillAllDoctorsToTarget", () => {
         targetHours: 240,
         seniority: "SENIOR",
         restrictions: [],
+    schedulingRuleExempt: false,
       },
       {
         id: "j1",
@@ -228,6 +231,7 @@ describe("fillAllDoctorsToTarget", () => {
         targetHours: 120,
         seniority: "JUNIOR",
         restrictions: [],
+    schedulingRuleExempt: false,
       },
     ];
 

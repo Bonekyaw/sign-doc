@@ -46,6 +46,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "SENIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "j1",
@@ -53,6 +54,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "JUNIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "j2",
@@ -60,6 +62,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "JUNIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "j3",
@@ -67,6 +70,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "JUNIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "j4",
@@ -74,6 +78,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "JUNIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "j5",
@@ -81,6 +86,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "JUNIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
 ];
 
@@ -159,5 +165,94 @@ describe("validateAssignment over-coverage", () => {
     });
 
     assert.equal(result.ok, true);
+  });
+});
+
+describe("validateAssignment rule-exempt doctors", () => {
+  const exemptDoctor: DoctorInfo = {
+    id: "exempt-1",
+    name: "Exempt",
+    targetHours: 240,
+    seniority: "JUNIOR",
+    restrictions: [],
+    schedulingRuleExempt: true,
+  };
+
+  it("allows forbidden fatigue patterns for exempt doctors on manualEdit", () => {
+    const existingShifts: ShiftAssignment[] = [
+      {
+        doctorId: exemptDoctor.id,
+        date: parseDateKey("2026-05-01"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+      {
+        doctorId: exemptDoctor.id,
+        date: parseDateKey("2026-05-02"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+      {
+        doctorId: exemptDoctor.id,
+        date: parseDateKey("2026-05-03"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+    ];
+    const monthKeys = ["2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04"];
+
+    const result = validateAssignment({
+      doctor: exemptDoctor,
+      date: parseDateKey("2026-05-04"),
+      shiftCode: "N",
+      shiftTypes,
+      existingShifts,
+      monthKeys,
+      coverageTarget,
+      doctors: [exemptDoctor],
+      purpose: "manualEdit",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.errors.length, 0);
+  });
+
+  it("still enforces rules for exempt doctors on coverage purpose", () => {
+    const existingShifts: ShiftAssignment[] = [
+      {
+        doctorId: exemptDoctor.id,
+        date: parseDateKey("2026-05-01"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+      {
+        doctorId: exemptDoctor.id,
+        date: parseDateKey("2026-05-02"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+      {
+        doctorId: exemptDoctor.id,
+        date: parseDateKey("2026-05-03"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+    ];
+    const monthKeys = ["2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04"];
+
+    const result = validateAssignment({
+      doctor: exemptDoctor,
+      date: parseDateKey("2026-05-04"),
+      shiftCode: "N",
+      shiftTypes,
+      existingShifts,
+      monthKeys,
+      coverageTarget,
+      doctors: [exemptDoctor],
+      purpose: "coverage",
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.errors.join(" "), /consecutive Night/i);
   });
 });

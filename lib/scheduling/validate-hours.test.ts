@@ -11,6 +11,7 @@ const doctor: DoctorInfo = {
   targetHours: 240,
   seniority: "JUNIOR",
   restrictions: [],
+    schedulingRuleExempt: false,
 };
 
 function shift(dateStr: string, code: ShiftAssignment["shiftCode"]): ShiftAssignment {

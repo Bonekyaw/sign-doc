@@ -124,16 +124,15 @@ export class AutoScheduler {
     }
   }
 
-  /** Main entry: optional 24h first, then L/N gap-fill per day. */
+  /** Main entry: optional 24h per day before L/N gap-fill. */
   generateSchedule(includeTwentyFour = false): AutoSchedulerResult {
-    if (includeTwentyFour) {
-      this.fillTwentyFourShifts();
-    }
-
     for (const key of this.monthKeys) {
       const date = parseDateKey(key);
       const req = this.dailyRequirement(key);
 
+      if (includeTwentyFour) {
+        this.fillTwentyFourForDate(date, key);
+      }
       this.fillShiftType(date, key, ShiftType.LONG_DAY, req.longDayCount);
       this.fillShiftType(date, key, ShiftType.NIGHT, req.nightCount);
       this.markUnassignedAsOff(date, key);
@@ -303,46 +302,74 @@ export class AutoScheduler {
     return rotA - rotB;
   }
 
-  /** Assign 24h where legal, under monthly target, and the day still has band gaps (one per doctor per run). */
-  private fillTwentyFourShifts() {
+  /** Assign 24h on a date before separate L/N when either band still has a gap. */
+  private fillTwentyFourForDate(date: Date, key: string) {
     const config = this.shiftConfigs.get(ShiftType.TWENTY_FOUR);
     if (!config) return;
 
-    const placedTwentyFour = new Set<string>();
-    const orderedDoctors = [...this.doctors].sort(
-      (a, b) =>
-        b.targetHours -
-        this.getWorkedHours(b.id) -
-        (a.targetHours - this.getWorkedHours(a.id)),
-    );
+    const req = this.dailyRequirement(key);
+    const doctorsById = new Map(this.doctors.map((d) => [d.id, d]));
 
-    for (const doctor of orderedDoctors) {
-      if (placedTwentyFour.has(doctor.id)) continue;
-      if (
-        this.getWorkedHours(doctor.id) + config.hours >
-        doctor.targetHours
-      ) {
-        continue;
-      }
+    while (true) {
+      const lCount = countBandForDate(date, "L", this.getWorkingShifts());
+      const nCount = countBandForDate(date, "N", this.getWorkingShifts());
+      if (lCount >= req.longDayCount && nCount >= req.nightCount) break;
 
-      for (const key of this.monthKeys) {
-        const date = parseDateKey(key);
-        if (this.isAnchored(doctor.id, key)) continue;
-        if (this.hasWorkOnDate(doctor.id, date)) continue;
-        if (isOnApprovedLeave(doctor.id, date, this.leaveByDoctor)) continue;
+      const assignedToday = new Set(
+        this.getWorkingShifts()
+          .filter((s) => dateKey(s.date) === key)
+          .map((s) => s.doctorId),
+      );
 
-        const req = this.dailyRequirement(key);
-        const lCount = countBandForDate(date, "L", this.getWorkingShifts());
-        const nCount = countBandForDate(date, "N", this.getWorkingShifts());
-        if (lCount >= req.longDayCount && nCount >= req.nightCount) continue;
+      const lHasSenior = bandHasSenior(
+        date,
+        "L",
+        this.getWorkingShifts(),
+        doctorsById,
+      );
+      const nHasSenior = bandHasSenior(
+        date,
+        "N",
+        this.getWorkingShifts(),
+        doctorsById,
+      );
+      const preferSenior = !lHasSenior || !nHasSenior;
 
-        if (!this.canWorkShift(doctor, date, ShiftType.TWENTY_FOUR)) {
-          continue;
-        }
+      const eligible = this.doctors.filter(
+        (doc) =>
+          !assignedToday.has(doc.id) &&
+          !this.isAnchored(doc.id, key) &&
+          !isOnApprovedLeave(doc.id, date, this.leaveByDoctor) &&
+          !this.hasWorkOnDate(doc.id, date) &&
+          this.canWorkShift(doc, date, ShiftType.TWENTY_FOUR),
+      );
+
+      if (eligible.length === 0) break;
+
+      eligible.sort((a, b) =>
+        this.compareCandidates(
+          a,
+          b,
+          date,
+          "TWENTY_FOUR",
+          !preferSenior,
+        ),
+      );
+
+      let placed = false;
+      for (const doctor of eligible) {
+        const trialL = this.doctorsForBandManpower(date, "L", [doctor]);
+        const trialN = this.doctorsForBandManpower(date, "N", [doctor]);
+        const lValid = validateDailyManpower(date, ShiftType.LONG_DAY, trialL);
+        const nValid = validateDailyManpower(date, ShiftType.NIGHT, trialN);
+        if (!lValid.isValid || !nValid.isValid) continue;
+
         this.assignRecord(doctor.id, date, ShiftType.TWENTY_FOUR);
-        placedTwentyFour.add(doctor.id);
+        placed = true;
         break;
       }
+
+      if (!placed) break;
     }
   }
 
@@ -472,5 +499,5 @@ export function runAutoScheduler(
   params: AutoSchedulerParams,
 ): AutoSchedulerResult {
   const scheduler = new AutoScheduler(params);
-  return scheduler.generateSchedule(false);
+  return scheduler.generateSchedule(true);
 }

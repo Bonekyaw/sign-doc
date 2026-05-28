@@ -91,6 +91,7 @@ export function DoctorManager({
       seniority: "MID_LEVEL" as DoctorSeniority,
       monthlyHourLimit: schedulingRules.ftDefaultTargetHours,
       girlsOff24h: false,
+      schedulingRuleExempt: false,
       rotationTemplateId: null,
       rotationStartDate: null,
     },
@@ -108,6 +109,7 @@ export function DoctorManager({
         d?.targetMonthlyHours ?? defaultTargetHours(type, schedulingRules),
       girlsOff24h:
         d?.restrictions.some((r) => r.type === "NO_TWENTY_FOUR") ?? false,
+      schedulingRuleExempt: d?.schedulingRuleExempt ?? false,
       rotationTemplateId: d?.rotation?.templateId ?? null,
       rotationStartDate: d?.rotation?.startDate
         ? dateKey(d.rotation.startDate)
@@ -125,6 +127,7 @@ export function DoctorManager({
         seniority: data.seniority,
         monthlyHourLimit: data.monthlyHourLimit,
         girlsOff24h: data.girlsOff24h,
+        schedulingRuleExempt: data.schedulingRuleExempt,
         rotationTemplateId: data.rotationTemplateId || null,
         rotationStartDate: data.rotationStartDate || null,
       };
@@ -293,6 +296,16 @@ export function DoctorManager({
                 />
                 Girls off 24h (cannot work 24-hour shifts)
               </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.watch("schedulingRuleExempt")}
+                  onChange={(e) =>
+                    form.setValue("schedulingRuleExempt", e.target.checked)
+                  }
+                />
+                Exempt from scheduling rules (manual assign only)
+              </label>
               <div>
                 <Label>Rotation template (optional)</Label>
                 <Select
@@ -397,6 +410,11 @@ export function DoctorManager({
                 {d.restrictions.some((r) => r.type === "NO_TWENTY_FOUR") && (
                   <Badge className="bg-pink-100 text-pink-800">Girls off 24h</Badge>
                 )}
+                {d.schedulingRuleExempt && (
+                  <Badge className="bg-amber-100 text-amber-900">
+                    Rule exempt
+                  </Badge>
+                )}
                 {d.rotation && (
                   <Badge className="bg-violet-100 text-violet-800">
                     {d.rotation.template.name}
@@ -451,6 +469,11 @@ export function DoctorManager({
                   {d.restrictions.some((r) => r.type === "NO_TWENTY_FOUR") && (
                     <Badge className="bg-pink-100 text-pink-800">
                       Girls off 24h
+                    </Badge>
+                  )}
+                  {d.schedulingRuleExempt && (
+                    <Badge className="bg-amber-100 text-amber-900">
+                      Rule exempt
                     </Badge>
                   )}
                   {d.rotation && (

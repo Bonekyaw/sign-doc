@@ -8,6 +8,7 @@ import { warnMinDaysOff } from "@/lib/scheduling/validate-min-days-off";
 import { validateRestrictions } from "@/lib/scheduling/validate-restrictions";
 import { validateSeniorManpowerForDate } from "@/lib/scheduling/validate-senior-manpower";
 import { validateOffStreakOnAssign } from "@/lib/scheduling/validate-consecutive-off";
+import { doctorBypassesSchedulingRules } from "@/lib/scheduling/doctor-rule-exempt";
 import type {
   CoverageTarget,
   DoctorInfo,
@@ -59,6 +60,10 @@ export function validateAssignment(params: {
     if (!allowInactiveOff) {
       return { ok: false, errors: ["This shift type is inactive."], warnings: [] };
     }
+  }
+
+  if (doctorBypassesSchedulingRules(doctor, purpose)) {
+    return { ok: true, errors: [], warnings: [] };
   }
 
   const restrictionError = validateRestrictions(doctor, shiftCode);

@@ -71,6 +71,7 @@ type DoctorRow = {
   name: string;
   targetHours: number;
   seniority?: DoctorSeniority;
+  schedulingRuleExempt?: boolean;
 };
 
 type ShiftRow = {
@@ -627,6 +628,7 @@ export function ScheduleView({
         seniority: d.seniority ?? "MID_LEVEL",
         targetHours: d.targetHours,
         restrictions: [],
+        schedulingRuleExempt: d.schedulingRuleExempt ?? false,
       })),
       coverageTemplate: coverageByDate.map((c) => ({
         date: c.date,

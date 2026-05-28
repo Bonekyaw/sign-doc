@@ -40,6 +40,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "SENIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "d2",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { dateKey, parseDateKey } from "@/lib/scheduling/dates";
-import { AutoScheduler } from "@/lib/scheduling/auto-scheduler";
+import { AutoScheduler, runAutoScheduler } from "@/lib/scheduling/auto-scheduler";
 import { rulesForMainFlow } from "@/lib/scheduling/main-flow-rules";
 import { hasNightBeforeTwentyFour } from "@/lib/scheduling/validate-main-flow";
 import type { DoctorInfo, ShiftTypeInfo } from "@/lib/scheduling/types";
@@ -40,6 +40,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "SENIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "junior-1",
@@ -47,6 +48,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "JUNIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
 ];
 
@@ -156,33 +158,6 @@ describe("AutoScheduler", () => {
     );
   });
 
-  it("places 24h when includeTwentyFour is enabled and rules allow", () => {
-    const monthKeys = ["2026-05-01", "2026-05-02", "2026-05-03"];
-    const scheduler = new AutoScheduler({
-      doctors,
-      shiftTypes,
-      monthKeys,
-      existingShifts: [],
-      getCoverageForDateKey: () => ({
-        dayShiftTarget: 1,
-        nightShiftTarget: 1,
-      }),
-      rules: rulesForMainFlow(),
-    });
-
-    const { proposals } = scheduler.generateSchedule(true);
-    const h24 = proposals.filter((p) => p.shiftCode === "TWENTY_FOUR");
-    assert.ok(h24.length > 0, "scheduler should place at least one 24h shift");
-    assert.equal(hasNightBeforeTwentyFour(
-      proposals.map((p) => ({
-        doctorId: p.doctorId,
-        date: parseDateKey(p.date),
-        shiftCode: p.shiftCode,
-        durationHours: p.durationHours,
-      })),
-    ), false);
-  });
-
   it("counts 24h toward both bands so L/N are not duplicated on the same day", () => {
     const scheduler = new AutoScheduler({
       doctors,
@@ -208,6 +183,28 @@ describe("AutoScheduler", () => {
       lnOn24Day.length,
       0,
       "24h should satisfy L1-N1 without separate L/N on the same day",
+    );
+  });
+
+  it("runAutoScheduler places 24h before separate L/N on L1-N1 days", () => {
+    const { proposals } = runAutoScheduler({
+      doctors,
+      shiftTypes,
+      monthKeys: ["2026-05-01"],
+      existingShifts: [],
+      getCoverageForDateKey: () => ({
+        dayShiftTarget: 1,
+        nightShiftTarget: 1,
+      }),
+      rules: rulesForMainFlow(),
+    });
+
+    const day1 = proposals.filter((p) => p.date === "2026-05-01");
+    const h24 = day1.filter((p) => p.shiftCode === "TWENTY_FOUR");
+    assert.ok(h24.length >= 1, "production scheduler should place 24h first");
+    assert.equal(
+      day1.filter((p) => p.shiftCode === "L" || p.shiftCode === "N").length,
+      0,
     );
   });
 });

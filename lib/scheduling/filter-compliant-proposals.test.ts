@@ -18,6 +18,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "SENIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
 ];
 const shiftTypes: ShiftTypeInfo[] = [

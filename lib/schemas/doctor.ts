@@ -7,6 +7,7 @@ export const doctorSchema = z
     seniority: z.enum(["SENIOR", "MID_LEVEL", "JUNIOR"]),
     monthlyHourLimit: z.number().int().min(1).max(300),
     girlsOff24h: z.boolean(),
+    schedulingRuleExempt: z.boolean(),
     rotationTemplateId: z.string().optional().nullable(),
     rotationStartDate: z
       .string()

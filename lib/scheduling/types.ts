@@ -27,6 +27,7 @@ export type DoctorInfo = {
   seniority: DoctorSeniority;
   targetHours: number;
   restrictions: ("NO_TWENTY_FOUR")[];
+  schedulingRuleExempt: boolean;
 };
 
 export type CoverageTarget = {

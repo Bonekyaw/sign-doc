@@ -38,6 +38,7 @@ export async function ScheduleMonthContent({
         name: d.name,
         targetHours: d.targetHours,
         seniority: d.seniority,
+        schedulingRuleExempt: d.schedulingRuleExempt,
       }))}
       shiftTypes={data.shiftTypes.map((t) => ({
         id: t.id,

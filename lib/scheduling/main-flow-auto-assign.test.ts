@@ -50,6 +50,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "SENIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
   {
     id: "junior-1",
@@ -57,6 +58,7 @@ const doctors: DoctorInfo[] = [
     targetHours: 240,
     seniority: "JUNIOR",
     restrictions: [],
+    schedulingRuleExempt: false,
   },
 ];
 
@@ -146,6 +148,7 @@ describe("validateShiftsAgainstMainFlow", () => {
         targetHours: 240,
         seniority: "SENIOR",
         restrictions: [],
+    schedulingRuleExempt: false,
       },
       {
         id: "half-1",
@@ -153,6 +156,7 @@ describe("validateShiftsAgainstMainFlow", () => {
         targetHours: 120,
         seniority: "MID_LEVEL",
         restrictions: [],
+    schedulingRuleExempt: false,
       },
       {
         id: "pt-1",
@@ -160,6 +164,7 @@ describe("validateShiftsAgainstMainFlow", () => {
         targetHours: 72,
         seniority: "JUNIOR",
         restrictions: [],
+    schedulingRuleExempt: false,
       },
     ];
     const shifts: ShiftAssignment[] = [
@@ -205,6 +210,118 @@ describe("validateShiftsAgainstMainFlow", () => {
         (v) => v.includes("Part Timer") && v.includes("72h") && /short/i.test(v),
       ),
       "part-time individualized target should be enforced",
+    );
+  });
+});
+
+describe("validateShiftsAgainstMainFlow rule-exempt doctors", () => {
+  it("skips fatigue, hour shortfalls, and senior checks for exempt doctors", () => {
+    const exemptDoctors: DoctorInfo[] = [
+      {
+        id: "exempt-1",
+        name: "Exempt One",
+        targetHours: 240,
+        seniority: "JUNIOR",
+        restrictions: [],
+        schedulingRuleExempt: true,
+      },
+    ];
+    const shifts: ShiftAssignment[] = [
+      {
+        doctorId: "exempt-1",
+        date: parseDateKey("2026-05-01"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+      {
+        doctorId: "exempt-1",
+        date: parseDateKey("2026-05-02"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+      {
+        doctorId: "exempt-1",
+        date: parseDateKey("2026-05-03"),
+        shiftCode: "N",
+        durationHours: 12,
+      },
+    ];
+
+    const violations = validateShiftsAgainstMainFlow({
+      year: 2026,
+      month: 5,
+      doctors: exemptDoctors,
+      shifts,
+      requireMonthlyHourTargets: true,
+    });
+
+    assert.equal(violations.length, 0);
+  });
+
+  it("skips senior requirement when every doctor on a band is exempt", () => {
+    const exemptOnly: DoctorInfo[] = [
+      {
+        id: "exempt-1",
+        name: "Exempt One",
+        targetHours: 240,
+        seniority: "JUNIOR",
+        restrictions: [],
+        schedulingRuleExempt: true,
+      },
+    ];
+    const shifts: ShiftAssignment[] = [
+      {
+        doctorId: "exempt-1",
+        date: parseDateKey("2026-05-01"),
+        shiftCode: "L",
+        durationHours: 12,
+      },
+    ];
+
+    const violations = validateShiftsAgainstMainFlow({
+      year: 2026,
+      month: 5,
+      doctors: exemptOnly,
+      shifts,
+    });
+
+    assert.equal(
+      violations.filter((v) => /Senior/i.test(v)).length,
+      0,
+      "all-exempt L band should not require senior",
+    );
+  });
+
+  it("still requires senior when a non-exempt doctor staffs a band", () => {
+    const mixed: DoctorInfo[] = [
+      {
+        id: "junior-1",
+        name: "Junior One",
+        targetHours: 240,
+        seniority: "JUNIOR",
+        restrictions: [],
+        schedulingRuleExempt: false,
+      },
+    ];
+    const shifts: ShiftAssignment[] = [
+      {
+        doctorId: "junior-1",
+        date: parseDateKey("2026-05-01"),
+        shiftCode: "L",
+        durationHours: 12,
+      },
+    ];
+
+    const violations = validateShiftsAgainstMainFlow({
+      year: 2026,
+      month: 5,
+      doctors: mixed,
+      shifts,
+    });
+
+    assert.ok(
+      violations.some((v) => /Senior/i.test(v)),
+      "non-exempt junior-only L band should violate senior manpower",
     );
   });
 });
@@ -281,6 +398,43 @@ describe("autoAssign main-flow compliance", () => {
     assert.ok(
       h24.length >= 2,
       "auto-assign should place multiple 24h shifts toward monthly targets",
+    );
+  });
+
+  it("prefers 24h over separate L/N on days where either band has a gap", () => {
+    const result = autoAssign({
+      year: 2026,
+      month: 5,
+      doctors,
+      shiftTypes,
+      existingShifts: [],
+      monthDefaults: { dayShiftTarget: 1, nightShiftTarget: 1 },
+      dailyOverrides: new Map(),
+      leaveByDoctor: new Map(),
+      rules: DEFAULT_SCHEDULING_RULES,
+    });
+
+    const byDate = new Map<string, typeof result.proposals>();
+    for (const p of result.proposals) {
+      const list = byDate.get(p.date) ?? [];
+      list.push(p);
+      byDate.set(p.date, list);
+    }
+
+    let daysWith24hCoveringBothBands = 0;
+    for (const [, dayProposals] of byDate) {
+      const h24 = dayProposals.filter((p) => p.shiftCode === "TWENTY_FOUR");
+      const ln = dayProposals.filter(
+        (p) => p.shiftCode === "L" || p.shiftCode === "N",
+      );
+      if (h24.length > 0 && ln.length === 0) {
+        daysWith24hCoveringBothBands++;
+      }
+    }
+
+    assert.ok(
+      daysWith24hCoveringBothBands >= 1,
+      "auto-assign should use 24h alone on at least one L/N staffed day",
     );
   });
 

@@ -35,6 +35,7 @@ function buildRoster(): DoctorInfo[] {
       targetHours: 240,
       seniority: "SENIOR",
       restrictions: [],
+    schedulingRuleExempt: false,
     });
   }
   for (let i = 0; i < 6; i++) {
@@ -44,6 +45,7 @@ function buildRoster(): DoctorInfo[] {
       targetHours: 240,
       seniority: "JUNIOR",
       restrictions: [],
+    schedulingRuleExempt: false,
     });
   }
   return roster;

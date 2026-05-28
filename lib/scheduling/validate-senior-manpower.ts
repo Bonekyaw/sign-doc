@@ -50,7 +50,10 @@ export function validateSeniorManpowerForBand(
   date: Date,
   band: "L" | "N",
   shifts: ShiftAssignment[],
-  doctorsById: Map<string, Pick<DoctorInfo, "seniority">>,
+  doctorsById: Map<
+    string,
+    Pick<DoctorInfo, "seniority" | "schedulingRuleExempt">
+  >,
   rules: SchedulingRulesConfig = DEFAULT_SCHEDULING_RULES,
 ): string | null {
   if (!seniorRequiredForBand(band, rules)) return null;
@@ -62,6 +65,11 @@ export function validateSeniorManpowerForBand(
     (s) =>
       dateKey(s.date) === key && shiftCountsTowardBand(s.shiftCode, band),
   );
+  const allExempt = onBand.every(
+    (s) => doctorsById.get(s.doctorId)?.schedulingRuleExempt === true,
+  );
+  if (allExempt) return null;
+
   const assignedDoctors: DoctorRecord[] = onBand.map((s) => {
     const d = doctorsById.get(s.doctorId);
     return {
@@ -80,11 +88,17 @@ export function validateSeniorManpowerForBand(
 export function validateSeniorManpowerForDate(
   date: Date,
   shifts: ShiftAssignment[],
-  doctors: Pick<DoctorInfo, "id" | "seniority">[],
+  doctors: Pick<DoctorInfo, "id" | "seniority" | "schedulingRuleExempt">[],
   rules: SchedulingRulesConfig = DEFAULT_SCHEDULING_RULES,
 ): string[] {
   const doctorsById = new Map(
-    doctors.map((d) => [d.id, { seniority: d.seniority as DoctorSeniority }]),
+    doctors.map((d) => [
+      d.id,
+      {
+        seniority: d.seniority as DoctorSeniority,
+        schedulingRuleExempt: d.schedulingRuleExempt,
+      },
+    ]),
   );
   const errors: string[] = [];
   for (const band of ["L", "N"] as const) {

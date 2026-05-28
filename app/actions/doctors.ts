@@ -47,6 +47,7 @@ export async function createDoctor(input: {
   monthlyHourLimit?: number;
   targetHours?: number;
   girlsOff24h?: boolean;
+  schedulingRuleExempt?: boolean;
   noTwentyFour?: boolean;
   rotationTemplateId?: string | null;
   rotationStartDate?: string | null;
@@ -65,6 +66,7 @@ export async function createDoctor(input: {
     seniority: input.seniority,
     monthlyHourLimit: limit,
     girlsOff24h: girlsOff,
+    schedulingRuleExempt: input.schedulingRuleExempt ?? false,
     rotationTemplateId: input.rotationTemplateId ?? null,
     rotationStartDate: input.rotationStartDate ?? null,
   });
@@ -78,6 +80,7 @@ export async function createDoctor(input: {
       type: parsed.data.type,
       seniority: parsed.data.seniority,
       targetMonthlyHours: parsed.data.monthlyHourLimit,
+      schedulingRuleExempt: parsed.data.schedulingRuleExempt,
       restrictions: parsed.data.girlsOff24h
         ? { create: [{ type: "NO_TWENTY_FOUR" }] }
         : undefined,
@@ -106,6 +109,7 @@ export async function updateDoctor(
     monthlyHourLimit?: number;
     targetHours?: number;
     girlsOff24h?: boolean;
+    schedulingRuleExempt?: boolean;
     noTwentyFour?: boolean;
     rotationTemplateId?: string | null;
     rotationStartDate?: string | null;
@@ -125,6 +129,7 @@ export async function updateDoctor(
     seniority: input.seniority,
     monthlyHourLimit: limit,
     girlsOff24h: girlsOff,
+    schedulingRuleExempt: input.schedulingRuleExempt ?? false,
     rotationTemplateId: input.rotationTemplateId ?? null,
     rotationStartDate: input.rotationStartDate ?? null,
   });
@@ -140,6 +145,7 @@ export async function updateDoctor(
         type: parsed.data.type,
         seniority: parsed.data.seniority,
         targetMonthlyHours: parsed.data.monthlyHourLimit,
+        schedulingRuleExempt: parsed.data.schedulingRuleExempt,
       },
     });
     await tx.doctorRestriction.deleteMany({ where: { doctorId: id } });

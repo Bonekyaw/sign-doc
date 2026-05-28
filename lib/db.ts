@@ -1,12 +1,26 @@
 import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/app/generated/prisma/client";
+import { Prisma, PrismaClient } from "@/app/generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
   rawPrisma: PrismaClient | undefined;
   wrappedPrisma: PrismaClient | undefined;
   pgPool: pg.Pool | undefined;
+  doctorSchemaFingerprint: string | undefined;
 };
+
+function getDoctorSchemaFingerprint(): string {
+  return Object.keys(Prisma.DoctorScalarFieldEnum).sort().join(",");
+}
+
+function isPrismaClientSchemaCurrent(client: PrismaClient): boolean {
+  return (
+    globalForPrisma.doctorSchemaFingerprint === getDoctorSchemaFingerprint() &&
+    "schedulingRules" in client &&
+    "monthSchedule" in client &&
+    "manpowerRatioPreset" in client
+  );
+}
 
 const TRANSIENT_DB_CODES = new Set([
   "ECONNRESET",
@@ -69,6 +83,7 @@ function resetDbClients() {
   globalForPrisma.pgPool = undefined;
   globalForPrisma.rawPrisma = undefined;
   globalForPrisma.wrappedPrisma = undefined;
+  globalForPrisma.doctorSchemaFingerprint = undefined;
 }
 
 function createPrismaClient() {
@@ -80,16 +95,12 @@ function createPrismaClient() {
 
 function getRawPrismaClient(): PrismaClient {
   const cached = globalForPrisma.rawPrisma;
-  if (
-    cached &&
-    "schedulingRules" in cached &&
-    "monthSchedule" in cached &&
-    "manpowerRatioPreset" in cached
-  ) {
+  if (cached && isPrismaClientSchemaCurrent(cached)) {
     return cached;
   }
   const client = createPrismaClient();
   globalForPrisma.rawPrisma = client;
+  globalForPrisma.doctorSchemaFingerprint = getDoctorSchemaFingerprint();
   return client;
 }
 

@@ -60,6 +60,13 @@ function buildHourSlots(
   const lType = shiftTypes.find((s) => s.code === "L" && s.isActive);
   const nType = shiftTypes.find((s) => s.code === "N" && s.isActive);
   const h24Type = shiftTypes.find((s) => s.code === "TWENTY_FOUR" && s.isActive);
+  if (includeTwentyFour && h24Type) {
+    slots.push({
+      code: "TWENTY_FOUR",
+      typeId: h24Type.id,
+      hours: h24Type.durationHours,
+    });
+  }
   if (lType) {
     slots.push({
       code: "L",
@@ -74,13 +81,6 @@ function buildHourSlots(
       typeId: nType.id,
       hours: nType.durationHours,
       band: "N",
-    });
-  }
-  if (includeTwentyFour && h24Type) {
-    slots.push({
-      code: "TWENTY_FOUR",
-      typeId: h24Type.id,
-      hours: h24Type.durationHours,
     });
   }
   return slots;
@@ -141,6 +141,11 @@ function orderSlotsForDoctor(
   );
 
   return [...slots].sort((a, b) => {
+    const lCount = countBandForDate(date, "L", workingShifts);
+    const nCount = countBandForDate(date, "N", workingShifts);
+    const lGap = Math.max(0, coverage.dayShiftTarget - lCount);
+    const nGap = Math.max(0, coverage.nightShiftTarget - nCount);
+
     const score = (slot: HourSlot) => {
       let s = 0;
       if (slot.hours > remaining) return 1000 + slot.hours;
@@ -148,6 +153,8 @@ function orderSlotsForDoctor(
       if (slot.code === "TWENTY_FOUR") {
         if (allowTwentyFour && remaining >= slot.hours) {
           s -= 900;
+          if (lGap > 0 || nGap > 0) s -= 250;
+          if (lGap > 0 && nGap > 0) s -= 200;
           if (slot.hours === remaining) s -= 200;
           if (!openAfter && remaining === slot.hours) s -= 100;
         } else {

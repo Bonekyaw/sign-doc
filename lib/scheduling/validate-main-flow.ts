@@ -56,6 +56,8 @@ export function auditMainFlowSchedule(params: {
 
   for (const p of proposals) {
     const doctor = doctors.find((d) => d.id === p.doctorId);
+    if (doctor?.schedulingRuleExempt) continue;
+
     const date = parseDateKey(p.date);
     const others = allShifts.filter(
       (s) =>
@@ -99,6 +101,8 @@ export function auditMainFlowSchedule(params: {
   }
 
   for (const doctor of doctors) {
+    if (doctor.schedulingRuleExempt) continue;
+
     const offErr = validateConsecutiveOffDays(
       doctor.id,
       doctor.name,
@@ -151,6 +155,8 @@ export function validateShiftsAgainstMainFlow(params: {
 
   if (requireMonthlyHourTargets) {
     for (const doctor of doctors) {
+      if (doctor.schedulingRuleExempt) continue;
+
       const worked = computeMonthlyHours(doctor.id, monthKeys, shifts);
       if (worked < doctor.targetHours) {
         const short = doctor.targetHours - worked;

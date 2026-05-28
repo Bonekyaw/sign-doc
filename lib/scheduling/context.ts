@@ -66,6 +66,7 @@ export async function loadDoctors(): Promise<DoctorInfo[]> {
     seniority: d.seniority,
     targetHours: d.targetMonthlyHours,
     restrictions: d.restrictions.map((r) => r.type as "NO_TWENTY_FOUR"),
+    schedulingRuleExempt: d.schedulingRuleExempt,
   }));
 }
 

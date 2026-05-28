@@ -75,6 +75,8 @@ model Doctor {
   seniority     DoctorSeniority     @default(MID_LEVEL)
   /// Monthly hour target (240 for full-time; set from Doctor.type in app/seed).
   targetMonthlyHours Int            @map("target_hours")
+  /// When true, admin manual schedule edits skip scheduling rule validation.
+  schedulingRuleExempt Boolean      @default(false) @map("scheduling_rule_exempt")
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
   shifts        Shift[]

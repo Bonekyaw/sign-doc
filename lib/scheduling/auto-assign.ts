@@ -6,6 +6,7 @@ import {
   type HourShortfall,
 } from "@/lib/scheduling/auto-assign-hours";
 import { fillUnderstaffedCoverage } from "@/lib/scheduling/fill-understaffed-coverage";
+import { fillTwentyFourCoverage } from "@/lib/scheduling/fill-twenty-four-coverage";
 import { optimizeAssignments } from "@/lib/scheduling/auto-assign-optimize";
 import type { DoctorRotationInfo } from "@/lib/scheduling/rotation";
 import { countBandForDate } from "@/lib/scheduling/validate-coverage";
@@ -99,6 +100,15 @@ function runCoverageAndHourFillLoop(params: {
   const warnings: string[] = [];
 
   for (let pass = 0; pass < maxPasses; pass++) {
+    const twentyFourFill = fillTwentyFourCoverage({
+      doctors,
+      shiftTypes,
+      workingShifts,
+      monthKeys,
+      getCoverageForDateKey,
+      leaveByDoctor,
+      rules,
+    });
     const coverageFill = fillUnderstaffedCoverage({
       doctors,
       shiftTypes,
@@ -119,12 +129,22 @@ function runCoverageAndHourFillLoop(params: {
       rules,
     });
 
-    proposals.push(...coverageFill.proposals, ...hourFill.proposals);
-    warnings.push(...coverageFill.warnings, ...hourFill.warnings);
+    proposals.push(
+      ...twentyFourFill.proposals,
+      ...coverageFill.proposals,
+      ...hourFill.proposals,
+    );
+    warnings.push(
+      ...twentyFourFill.warnings,
+      ...coverageFill.warnings,
+      ...hourFill.warnings,
+    );
+    applyProposalsToWorking(workingShifts, twentyFourFill.proposals);
     applyProposalsToWorking(workingShifts, coverageFill.proposals);
     applyProposalsToWorking(workingShifts, hourFill.proposals);
 
     if (
+      twentyFourFill.proposals.length === 0 &&
       coverageFill.proposals.length === 0 &&
       hourFill.proposals.length === 0
     ) {
